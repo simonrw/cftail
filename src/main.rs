@@ -9,10 +9,14 @@ use std::time::Duration;
 use structopt::StructOpt;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tokio::time::delay_for;
+use std::fmt::Debug;
 
 #[derive(StructOpt)]
 struct Opts {
     stack_name: String,
+
+    #[structopt(short, long)]
+    since: Option<i64>,
 }
 
 #[async_trait]
@@ -26,6 +30,7 @@ trait Fetch {
         S: Into<String> + Send;
 }
 
+#[derive(Debug)]
 struct Tail<F, W> {
     fetcher: F,
     writer: W,
@@ -33,29 +38,39 @@ struct Tail<F, W> {
 
 impl<F, W> Tail<F, W>
 where
-    F: Fetch,
-    W: WriteColor,
+    F: Fetch + Debug,
+    W: WriteColor + Debug,
 {
     fn new(fetcher: F, writer: W) -> Self {
         Self { fetcher, writer }
     }
 
-    async fn poll(&mut self, stack_name: &str) {
-        let start_time: DateTime<Utc> = Utc::now();
+    #[tracing::instrument]
+    async fn poll(&mut self, stack_name: &str, since: DateTime<Utc>) {
+        tracing::debug!(start_time = ?since, "showing logs from now");
 
         let mut seen_events = HashSet::new();
 
         loop {
+            tracing::trace!(seen_events = ?seen_events);
             if let Err(e) = self
                 .fetcher
-                .fetch_events_since(stack_name, &start_time)
+                .fetch_events_since(stack_name, &since)
                 .await
                 .map(|events| {
-                    for event in events.into_iter().rev() {
+                    let mut events = events.clone();
+                    tracing::debug!(nevents = events.len(), "found new events");
+                    events.sort_by(|a, b| {
+                        let a_timestamp = DateTime::parse_from_rfc3339(&a.timestamp).unwrap();
+                        let b_timestamp = DateTime::parse_from_rfc3339(&b.timestamp).unwrap();
+
+                        a_timestamp.partial_cmp(&b_timestamp).unwrap()
+                    });
+                    for event in events.into_iter() {
                         let timestamp = DateTime::parse_from_rfc3339(&event.timestamp)
                             .expect("parsing event time");
                         // Filter on timestamp
-                        if timestamp < start_time {
+                        if timestamp < since {
                             continue;
                         }
 
@@ -76,6 +91,7 @@ where
         }
     }
 
+    #[tracing::instrument]
     fn print_event(&mut self, event: &rusoto_cloudformation::StackEvent) {
         let resource_name = event.logical_resource_id.as_ref().unwrap();
         let status = event.resource_status.as_ref().unwrap();
@@ -123,6 +139,12 @@ where
 
 struct CFClient(CloudFormationClient);
 
+impl Debug for CFClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CloudformationClient")
+    }
+}
+
 #[async_trait]
 impl Fetch for CFClient {
     async fn fetch_events_since<S>(
@@ -147,23 +169,65 @@ impl Fetch for CFClient {
                 let timestamp = DateTime::parse_from_rfc3339(&e.timestamp).unwrap();
                 &timestamp > start_time
             })
-            .rev()
             .collect())
     }
 }
 
+struct Writer<'a>(termcolor::StandardStreamLock<'a>);
+
+impl<'a> Debug for Writer<'a> {
+    fn fmt(&self, w: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        w.write_str("writer")
+    }
+}
+
+impl<'a> std::io::Write for Writer<'a> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.0.flush()
+    }
+}
+
+impl<'a> termcolor::WriteColor for Writer<'a> {
+    fn supports_color(&self) -> bool {
+        self.0.supports_color()
+    }
+
+    fn set_color(&mut self, spec: &ColorSpec) -> std::io::Result<()> {
+        self.0.set_color(spec)
+    }
+
+    fn reset(&mut self) -> std::io::Result<()> {
+        self.0.reset()
+    }
+}
+
+#[tracing::instrument]
+fn foo(value: i32) -> i32 {
+    tracing::info!("inside foo");
+    value
+}
+
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt::init();
+
     let opts = Opts::from_args();
 
+    let since = opts.since.map(|s| Utc.timestamp(s, 0)).unwrap_or_else(|| Utc::now());
+
     let region = Region::default();
+    tracing::debug!(region = ?region, "chosen region");
     let client = CloudFormationClient::new(region);
 
-    let stdout = StandardStream::stdout(ColorChoice::Always);
-    let handle = stdout.lock();
+    let stdout = StandardStream::stdout(ColorChoice::Auto);
+    let handle = Writer(stdout.lock());
 
     let mut tail = Tail::new(CFClient(client), handle);
-    tail.poll(&opts.stack_name).await;
+    tail.poll(&opts.stack_name, since).await;
 }
 
 #[cfg(test)]
@@ -172,6 +236,25 @@ mod tests {
 
     #[test]
     fn something() {
-        assert!(true);
+        struct FakeFetcher;
+
+        #[async_trait]
+        impl Fetch for FakeFetcher {
+            async fn fetch_events_since<S>(
+                &self,
+                stack_name: S,
+                start_time: &DateTime<Utc>,
+            ) -> Result<Vec<StackEvent>, Box<dyn std::error::Error>>
+            where
+                S: Into<String> + Send,
+            {
+                todo!()
+            }
+        }
+
+        let writer = StandardStream::stdout(ColorChoice::Auto);
+        let handle = writer.lock();
+
+        let mut tail = Tail::new(FakeFetcher {}, handle);
     }
 }
