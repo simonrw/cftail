@@ -52,6 +52,7 @@ async fn main() {
         );
         // tail.prefetch().await;
 
+        tracing::debug!("starting poll loop");
         match tail.poll().await {
             Ok(_) => unreachable!(),
             Err(Error::CredentialTimeout) => continue,
