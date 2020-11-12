@@ -99,68 +99,61 @@ where
         });
     }
 
-    #[tracing::instrument]
     async fn poll(&mut self) -> Result<(), Error> {
         tracing::debug!(start_time = ?self.since, "showing logs from now");
 
-        loop {
-            tracing::trace!(seen_events = ?self.seen_events);
-            let res = exponential_backoff::backoff(|| {
-                self.fetcher
-                    .fetch_events_since(self.stack_name, &self.since)
-            })
-            .await;
-            if let Err(e) = res.map(|events| {
-                let mut events = events.clone();
-                tracing::debug!(nevents = events.len(), "found new events");
-                events.sort_by(event_sort_key);
-                for event in events.into_iter() {
-                    let timestamp =
-                        DateTime::parse_from_rfc3339(&event.timestamp).expect("parsing event time");
-                    // Filter on timestamp
-                    if timestamp < self.since {
-                        continue;
+        async move {
+            loop {
+                let res = exponential_backoff::backoff(5, || {
+                    self.fetcher
+                        .fetch_events_since(self.stack_name, &self.since)
+                })
+                .instrument(tracing::trace_span!("backoff"))
+                .await;
+
+                let res = res.map(|events| {
+                    let mut events = events.clone();
+                    tracing::debug!(nevents = events.len(), "found new events");
+                    events.sort_by(event_sort_key);
+                    for event in events.into_iter() {
+                        let timestamp = DateTime::parse_from_rfc3339(&event.timestamp)
+                            .expect("parsing event time");
+                        // Filter on timestamp
+                        if timestamp < self.since {
+                            continue;
+                        }
+
+                        if self.seen_events.contains(&event.event_id) {
+                            continue;
+                        }
+
+                        self.print_event(&event);
+
+                        self.seen_events.insert(event.event_id);
                     }
+                });
 
-                    if self.seen_events.contains(&event.event_id) {
-                        continue;
+                if let Err(e) = res {
+                    match e {
+                        rusoto_core::RusotoError::Unknown(response) => {
+                            // TODO: Handle credential refreshing
+                            tracing::warn!(
+                                status_code = response.status.as_u16(),
+                                message = response.body_as_str(),
+                                "HTTP error"
+                            );
+                            return Err(Error::Http(response));
+                        }
+                        _ => tracing::warn!(err = ?e, "unexpected error"),
                     }
-
-                    self.print_event(&event);
-
-                    self.seen_events.insert(event.event_id);
                 }
-            }) {
-                match e {
-                    rusoto_core::RusotoError::Unknown(response) => {
-                        tracing::warn!(
-                            status_code = response.status.as_u16(),
-                            message = response.body_as_str(),
-                            "HTTP error"
-                        );
-                        return Err(Error::Http(response));
-                    }
-                    _ => tracing::warn!(err = ?e, "unexpected error"),
-                }
-                // TODO: Handle credential refreshing
-                // if let Some(e) = e.downcast_ref::<rusoto_core::HttpDispatchError>() {
-                //     let message = format!("{}", e);
-                //     if message.contains("connection closed before message completed") {
-                //         tracing::warn!(err = %e, "connection closed");
-                //     } else {
-                //         eprintln!("error: {}", e);
-                //     }
-                // } else if let Some(e) = e.source() {
-                //     let msg = format!("{}", e);
-                //     eprintln!("{}", msg);
-                // } else {
-                //     tracing::warn!(error = ?e, "non-http error");
-                // }
+
+                tracing::trace!("sleeping");
+                delay_for(Duration::from_secs(5)).await;
             }
-
-            tracing::trace!("sleeping");
-            delay_for(Duration::from_secs(5)).await;
         }
+        .instrument(tracing::debug_span!("poll-loop"))
+        .await
     }
 
     #[tracing::instrument]
@@ -348,11 +341,12 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let opts = Opts::from_args();
-
     let since = opts
         .since
         .map(|s| Utc.timestamp(s, 0))
         .unwrap_or_else(|| Utc::now());
+
+    tracing::info!(stack_name = %opts.stack_name, since = %since, "tailing stack events");
 
     loop {
         let region = Region::default();
