@@ -5,11 +5,12 @@ use rusoto_cloudformation::{
 };
 use rusoto_core::Region;
 use std::collections::HashSet;
+use std::fmt::Debug;
 use std::time::Duration;
 use structopt::StructOpt;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tokio::time::delay_for;
-use std::fmt::Debug;
+use tracing::Instrument;
 
 #[derive(StructOpt)]
 struct Opts {
@@ -28,59 +29,99 @@ trait Fetch {
     ) -> Result<Vec<StackEvent>, Box<dyn std::error::Error>>
     where
         S: Into<String> + Send;
+
+    async fn fetch_all_events<S>(
+        &self,
+        stack_name: S,
+    ) -> Result<Vec<StackEvent>, Box<dyn std::error::Error>>
+    where
+        S: Into<String> + Send + Debug;
 }
 
 #[derive(Debug)]
-struct Tail<F, W> {
+struct Tail<'a, F, W> {
     fetcher: F,
     writer: W,
+    stack_name: &'a str,
+    since: DateTime<Utc>,
+    seen_events: HashSet<String>,
+    latest_event: Option<DateTime<Utc>>,
 }
 
-impl<F, W> Tail<F, W>
+fn event_sort_key(a: &StackEvent, b: &StackEvent) -> std::cmp::Ordering {
+    let a_timestamp = DateTime::parse_from_rfc3339(&a.timestamp).unwrap();
+    let b_timestamp = DateTime::parse_from_rfc3339(&b.timestamp).unwrap();
+
+    a_timestamp.partial_cmp(&b_timestamp).unwrap()
+}
+
+impl<'a, F, W> Tail<'a, F, W>
 where
     F: Fetch + Debug,
     W: WriteColor + Debug,
 {
-    fn new(fetcher: F, writer: W) -> Self {
-        Self { fetcher, writer }
+    fn new(fetcher: F, writer: W, stack_name: &'a str, since: DateTime<Utc>) -> Self {
+        Self {
+            fetcher,
+            writer,
+            stack_name,
+            since,
+            seen_events: HashSet::new(),
+            latest_event: None,
+        }
+    }
+
+    // Fetch all of the events since the beginning of time, so that we can ensure all
+    // of the events are sorted.
+    #[tracing::instrument]
+    async fn prefetch(&mut self) {
+        let mut all_events = self
+            .fetcher
+            .fetch_all_events(self.stack_name)
+            .await
+            .unwrap();
+        all_events.sort_by(event_sort_key);
+
+        let last_event = &all_events[all_events.len() - 1];
+        self.latest_event = Some(
+            DateTime::parse_from_rfc3339(&last_event.timestamp)
+                .unwrap()
+                .with_timezone(&Utc),
+        );
+        all_events.iter().for_each(|e| {
+            self.seen_events.insert(e.event_id.clone());
+        });
     }
 
     #[tracing::instrument]
-    async fn poll(&mut self, stack_name: &str, since: DateTime<Utc>) {
-        tracing::debug!(start_time = ?since, "showing logs from now");
-
-        let mut seen_events = HashSet::new();
+    async fn poll(&mut self) {
+        tracing::debug!(start_time = ?self.since, "showing logs from now");
 
         loop {
-            tracing::trace!(seen_events = ?seen_events);
+            tracing::trace!(seen_events = ?self.seen_events);
             if let Err(e) = self
                 .fetcher
-                .fetch_events_since(stack_name, &since)
+                .fetch_events_since(self.stack_name, &self.since)
                 .await
                 .map(|events| {
                     let mut events = events.clone();
                     tracing::debug!(nevents = events.len(), "found new events");
-                    events.sort_by(|a, b| {
-                        let a_timestamp = DateTime::parse_from_rfc3339(&a.timestamp).unwrap();
-                        let b_timestamp = DateTime::parse_from_rfc3339(&b.timestamp).unwrap();
-
-                        a_timestamp.partial_cmp(&b_timestamp).unwrap()
-                    });
+                    events.sort_by(event_sort_key);
                     for event in events.into_iter() {
                         let timestamp = DateTime::parse_from_rfc3339(&event.timestamp)
                             .expect("parsing event time");
                         // Filter on timestamp
-                        if timestamp < since {
+                        if timestamp < self.since {
                             continue;
                         }
 
-                        if seen_events.contains(&event.event_id) {
+                        if self.seen_events.contains(&event.event_id) {
                             continue;
                         }
 
                         self.print_event(&event);
 
-                        seen_events.insert(event.event_id);
+                        self.seen_events.insert(event.event_id);
                     }
                 })
             {
@@ -171,6 +212,55 @@ impl Fetch for CFClient {
             })
             .collect())
     }
+
+    #[tracing::instrument]
+    async fn fetch_all_events<S>(
+        &self,
+        stack_name: S,
+    ) -> Result<Vec<StackEvent>, Box<dyn std::error::Error>>
+    where
+        S: Into<String> + Send + Debug,
+    {
+        let mut events = Vec::new();
+        let mut next_token: Option<String> = None;
+        let stack_name = stack_name.into();
+        loop {
+            tracing::debug!(next_token = ?next_token, "fetching more events");
+            let input = DescribeStackEventsInput {
+                stack_name: Some(stack_name.clone()),
+                next_token: next_token.clone(),
+            };
+
+            match self
+                .0
+                .describe_stack_events(input)
+                .instrument(tracing::debug_span!("fetching events"))
+                .await
+            {
+                Ok(response) => {
+                    match response.stack_events {
+                        Some(batch) => {
+                            events.extend_from_slice(&batch);
+                        }
+                        None => {
+                            tracing::debug!("reached end of events");
+                            break;
+                        }
+                    }
+
+                    if let Some(new_next_token) = response.next_token {
+                        next_token = Some(new_next_token);
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(err = ?e, "error fetching all events");
+                    break;
+                }
+            }
+        }
+        tracing::debug!(nevents = events.len(), "got all past events");
+        Ok(events)
+    }
 }
 
 struct Writer<'a>(termcolor::StandardStreamLock<'a>);
@@ -217,7 +307,10 @@ async fn main() {
 
     let opts = Opts::from_args();
 
-    let since = opts.since.map(|s| Utc.timestamp(s, 0)).unwrap_or_else(|| Utc::now());
+    let since = opts
+        .since
+        .map(|s| Utc.timestamp(s, 0))
+        .unwrap_or_else(|| Utc::now());
 
     let region = Region::default();
     tracing::debug!(region = ?region, "chosen region");
@@ -226,8 +319,9 @@ async fn main() {
     let stdout = StandardStream::stdout(ColorChoice::Auto);
     let handle = Writer(stdout.lock());
 
-    let mut tail = Tail::new(CFClient(client), handle);
-    tail.poll(&opts.stack_name, since).await;
+    let mut tail = Tail::new(CFClient(client), handle, &opts.stack_name, since);
+    tail.prefetch().await;
+    tail.poll().await;
 }
 
 #[cfg(test)]
@@ -250,11 +344,20 @@ mod tests {
             {
                 todo!()
             }
+            async fn fetch_all_events<S>(
+                &self,
+                stack_name: S,
+            ) -> Result<Vec<StackEvent>, Box<dyn std::error::Error>>
+            where
+                S: Into<String> + Send + Debug,
+            {
+                todo!()
+            }
         }
 
         let writer = StandardStream::stdout(ColorChoice::Auto);
         let handle = writer.lock();
 
-        let mut tail = Tail::new(FakeFetcher {}, handle);
+        // let mut tail = Tail::new(FakeFetcher {}, handle);
     }
 }
