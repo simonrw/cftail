@@ -63,9 +63,12 @@ async fn main() {
             }
             Err(Error::Http(r)) => {
                 tracing::error!(status_code = %r.status, message = %r.body_as_str(), "error making request");
-                break;
+                std::process::exit(1);
             }
-            Err(Error::Other(e)) => panic!("{}", e),
+            Err(Error::Other(e)) => {
+                tracing::error!(err = %e, "unexpected error");
+                std::process::exit(1);
+            }
         }
     }
 }
