@@ -1,8 +1,10 @@
 use chrono::prelude::*;
 use rusoto_cloudformation::CloudFormationClient;
 use rusoto_core::Region;
+use std::time::Duration;
 use structopt::StructOpt;
 use termcolor::{ColorChoice, StandardStream};
+use tokio::time::delay_for;
 
 mod cfclient;
 mod error;
@@ -55,7 +57,10 @@ async fn main() {
         tracing::debug!("starting poll loop");
         match tail.poll().await {
             Ok(_) => unreachable!(),
-            Err(Error::CredentialTimeout) => continue,
+            Err(Error::CredentialTimeout) => {
+                delay_for(Duration::from_secs(5)).await;
+                continue;
+            }
             Err(Error::Http(_r)) => break,
             Err(Error::Other(e)) => panic!("{}", e),
         }
