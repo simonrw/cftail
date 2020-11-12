@@ -1,9 +1,10 @@
 use async_trait::async_trait;
 use chrono::prelude::*;
 use rusoto_cloudformation::{
-    CloudFormation, CloudFormationClient, DescribeStackEventsInput, StackEvent,
+    CloudFormation, CloudFormationClient, DescribeStackEventsError, DescribeStackEventsInput,
+    StackEvent,
 };
-use rusoto_core::Region;
+use rusoto_core::{Region, RusotoError};
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::time::Duration;
@@ -14,6 +15,7 @@ use tracing::Instrument;
 
 enum Error {
     CredentialTimeout,
+    Http(rusoto_core::request::BufferedHttpResponse),
     Other(Box<dyn std::error::Error>),
 }
 
@@ -31,14 +33,14 @@ trait Fetch {
         &self,
         stack_name: S,
         start_time: &DateTime<Utc>,
-    ) -> Result<Vec<StackEvent>, Box<dyn std::error::Error>>
+    ) -> Result<Vec<StackEvent>, rusoto_core::RusotoError<DescribeStackEventsError>>
     where
         S: Into<String> + Send;
 
     async fn fetch_all_events<S>(
         &self,
         stack_name: S,
-    ) -> Result<Vec<StackEvent>, Box<dyn std::error::Error>>
+    ) -> Result<Vec<StackEvent>, rusoto_core::RusotoError<DescribeStackEventsError>>
     where
         S: Into<String> + Send + Debug;
 }
@@ -79,7 +81,7 @@ where
     // Fetch all of the events since the beginning of time, so that we can ensure all
     // of the events are sorted.
     #[tracing::instrument]
-    async fn prefetch(&mut self) {
+    async fn prefetch<E>(&mut self) {
         let mut all_events = self
             .fetcher
             .fetch_all_events(self.stack_name)
@@ -130,16 +132,34 @@ where
                     }
                 })
             {
-                // TODO: Handle credential refreshing
-                if let Some(e) = e.downcast_ref::<rusoto_core::HttpDispatchError>() {
-                    let message = format!("{}", e);
-                    if message.contains("connection closed before message completed") {
-                    } else {
-                        eprintln!("error: {}", e);
+                match e {
+                    rusoto_core::RusotoError::Unknown(response) => {
+                        tracing::warn!(
+                            status_code = response.status.as_u16(),
+                            message = response.body_as_str(),
+                            "HTTP error"
+                        );
+                        return Err(Error::Http(response));
                     }
+                    _ => tracing::warn!(err = ?e, "unexpected error"),
                 }
+                // TODO: Handle credential refreshing
+                // if let Some(e) = e.downcast_ref::<rusoto_core::HttpDispatchError>() {
+                //     let message = format!("{}", e);
+                //     if message.contains("connection closed before message completed") {
+                //         tracing::warn!(err = %e, "connection closed");
+                //     } else {
+                //         eprintln!("error: {}", e);
+                //     }
+                // } else if let Some(e) = e.source() {
+                //     let msg = format!("{}", e);
+                //     eprintln!("{}", msg);
+                // } else {
+                //     tracing::warn!(error = ?e, "non-http error");
+                // }
             }
 
+            tracing::trace!("sleeping");
             delay_for(Duration::from_secs(5)).await;
         }
     }
@@ -192,7 +212,11 @@ where
         if let Some(reason) = status_reason {
             writeln!(self.writer, " ({reason})", reason = reason).expect("printing");
         } else {
-            writeln!(self.writer, "").expect("printing");
+            if status == "UPDATE_COMPLETE" && resource_name == self.stack_name {
+                writeln!(self.writer, " 🎉✨🤘").expect("printing");
+            } else {
+                writeln!(self.writer, "").expect("printing");
+            }
         }
     }
 }
@@ -211,7 +235,7 @@ impl Fetch for CFClient {
         &self,
         stack_name: S,
         start_time: &DateTime<Utc>,
-    ) -> Result<Vec<StackEvent>, Box<dyn std::error::Error>>
+    ) -> Result<Vec<StackEvent>, RusotoError<DescribeStackEventsError>>
     where
         S: Into<String> + Send,
     {
@@ -236,7 +260,7 @@ impl Fetch for CFClient {
     async fn fetch_all_events<S>(
         &self,
         stack_name: S,
-    ) -> Result<Vec<StackEvent>, Box<dyn std::error::Error>>
+    ) -> Result<Vec<StackEvent>, RusotoError<DescribeStackEventsError>>
     where
         S: Into<String> + Send + Debug,
     {
@@ -346,45 +370,8 @@ async fn main() {
         match tail.poll().await {
             Ok(_) => unreachable!(),
             Err(Error::CredentialTimeout) => continue,
+            Err(Error::Http(r)) => break,
             Err(Error::Other(e)) => panic!("{}", e),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn something() {
-        struct FakeFetcher;
-
-        #[async_trait]
-        impl Fetch for FakeFetcher {
-            async fn fetch_events_since<S>(
-                &self,
-                stack_name: S,
-                start_time: &DateTime<Utc>,
-            ) -> Result<Vec<StackEvent>, Box<dyn std::error::Error>>
-            where
-                S: Into<String> + Send,
-            {
-                todo!()
-            }
-            async fn fetch_all_events<S>(
-                &self,
-                stack_name: S,
-            ) -> Result<Vec<StackEvent>, Box<dyn std::error::Error>>
-            where
-                S: Into<String> + Send + Debug,
-            {
-                todo!()
-            }
-        }
-
-        let writer = StandardStream::stdout(ColorChoice::Auto);
-        let handle = writer.lock();
-
-        // let mut tail = Tail::new(FakeFetcher {}, handle);
     }
 }
