@@ -61,7 +61,10 @@ async fn main() {
                 delay_for(Duration::from_secs(5)).await;
                 continue;
             }
-            Err(Error::Http(_r)) => break,
+            Err(Error::Http(r)) => {
+                tracing::error!(status_code = %r.status, message = %r.body_as_str(), "error making request");
+                break;
+            }
             Err(Error::Other(e)) => panic!("{}", e),
         }
     }
