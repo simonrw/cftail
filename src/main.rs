@@ -13,11 +13,10 @@ use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tokio::time::delay_for;
 use tracing::Instrument;
 
-enum Error {
-    CredentialTimeout,
-    Http(rusoto_core::request::BufferedHttpResponse),
-    Other(Box<dyn std::error::Error>),
-}
+mod error;
+mod exponential_backoff;
+
+use error::Error;
 
 #[derive(StructOpt)]
 struct Opts {
@@ -106,32 +105,32 @@ where
 
         loop {
             tracing::trace!(seen_events = ?self.seen_events);
-            if let Err(e) = self
-                .fetcher
-                .fetch_events_since(self.stack_name, &self.since)
-                .await
-                .map(|events| {
-                    let mut events = events.clone();
-                    tracing::debug!(nevents = events.len(), "found new events");
-                    events.sort_by(event_sort_key);
-                    for event in events.into_iter() {
-                        let timestamp = DateTime::parse_from_rfc3339(&event.timestamp)
-                            .expect("parsing event time");
-                        // Filter on timestamp
-                        if timestamp < self.since {
-                            continue;
-                        }
-
-                        if self.seen_events.contains(&event.event_id) {
-                            continue;
-                        }
-
-                        self.print_event(&event);
-
-                        self.seen_events.insert(event.event_id);
+            let res = exponential_backoff::backoff(|| {
+                self.fetcher
+                    .fetch_events_since(self.stack_name, &self.since)
+            })
+            .await;
+            if let Err(e) = res.map(|events| {
+                let mut events = events.clone();
+                tracing::debug!(nevents = events.len(), "found new events");
+                events.sort_by(event_sort_key);
+                for event in events.into_iter() {
+                    let timestamp =
+                        DateTime::parse_from_rfc3339(&event.timestamp).expect("parsing event time");
+                    // Filter on timestamp
+                    if timestamp < self.since {
+                        continue;
                     }
-                })
-            {
+
+                    if self.seen_events.contains(&event.event_id) {
+                        continue;
+                    }
+
+                    self.print_event(&event);
+
+                    self.seen_events.insert(event.event_id);
+                }
+            }) {
                 match e {
                     rusoto_core::RusotoError::Unknown(response) => {
                         tracing::warn!(
@@ -370,7 +369,7 @@ async fn main() {
         match tail.poll().await {
             Ok(_) => unreachable!(),
             Err(Error::CredentialTimeout) => continue,
-            Err(Error::Http(r)) => break,
+            Err(Error::Http(_r)) => break,
             Err(Error::Other(e)) => panic!("{}", e),
         }
     }
