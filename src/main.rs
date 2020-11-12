@@ -12,6 +12,11 @@ use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tokio::time::delay_for;
 use tracing::Instrument;
 
+enum Error {
+    CredentialTimeout,
+    Other(Box<dyn std::error::Error>),
+}
+
 #[derive(StructOpt)]
 struct Opts {
     stack_name: String,
@@ -94,7 +99,7 @@ where
     }
 
     #[tracing::instrument]
-    async fn poll(&mut self) {
+    async fn poll(&mut self) -> Result<(), Error> {
         tracing::debug!(start_time = ?self.since, "showing logs from now");
 
         loop {
@@ -125,7 +130,14 @@ where
                     }
                 })
             {
-                eprintln!("error requesting stack events: {:?}", e);
+                // TODO: Handle credential refreshing
+                if let Some(e) = e.downcast_ref::<rusoto_core::HttpDispatchError>() {
+                    let message = format!("{}", e);
+                    if message.contains("connection closed before message completed") {
+                    } else {
+                        eprintln!("error: {}", e);
+                    }
+                }
             }
 
             delay_for(Duration::from_secs(5)).await;
@@ -138,13 +150,20 @@ where
         let status = event.resource_status.as_ref().unwrap();
         let timestamp = &event.timestamp;
         let status_reason = event.resource_status_reason.as_ref();
-        write!(
-            self.writer,
-            "{timestamp}: {name} | ",
-            timestamp = timestamp,
-            name = resource_name
-        )
-        .expect("printing");
+
+        write!(self.writer, "{timestamp}: ", timestamp = timestamp).unwrap();
+        if resource_name == self.stack_name {
+            let mut spec = ColorSpec::new();
+            spec.set_fg(Some(Color::Yellow));
+            self.writer.set_color(&spec).unwrap();
+            write!(self.writer, "{name}", name = resource_name).unwrap();
+            self.writer.reset().unwrap();
+        } else {
+            write!(self.writer, "{name}", name = resource_name).unwrap();
+        }
+
+        write!(self.writer, " | ").unwrap();
+
         match status.as_str() {
             "UPDATE_IN_PROGRESS" | "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS" => {
                 let mut spec = ColorSpec::new();
@@ -312,16 +331,24 @@ async fn main() {
         .map(|s| Utc.timestamp(s, 0))
         .unwrap_or_else(|| Utc::now());
 
-    let region = Region::default();
-    tracing::debug!(region = ?region, "chosen region");
-    let client = CloudFormationClient::new(region);
+    loop {
+        let region = Region::default();
+        tracing::debug!(region = ?region, "chosen region");
 
-    let stdout = StandardStream::stdout(ColorChoice::Auto);
-    let handle = Writer(stdout.lock());
+        let client = CloudFormationClient::new(region);
 
-    let mut tail = Tail::new(CFClient(client), handle, &opts.stack_name, since);
-    tail.prefetch().await;
-    tail.poll().await;
+        let stdout = StandardStream::stdout(ColorChoice::Auto);
+        let handle = Writer(stdout.lock());
+
+        let mut tail = Tail::new(CFClient(client), handle, &opts.stack_name, since);
+        // tail.prefetch().await;
+
+        match tail.poll().await {
+            Ok(_) => unreachable!(),
+            Err(Error::CredentialTimeout) => continue,
+            Err(Error::Other(e)) => panic!("{}", e),
+        }
+    }
 }
 
 #[cfg(test)]
