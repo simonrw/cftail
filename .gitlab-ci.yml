@@ -39,8 +39,10 @@ test:cargo:
 build_linux:
   stage: build_binaries
   <<: *caching_rust
+  before_script:
+    - rustup target add x86_64-unknown-linux-gnu
   script:
-    - cargo build --release --target x86_64-unknown-linux
+    - cargo build --release --target x86_64-unknown-linux-gnu
   artifacts:
      paths:
-       - target/x86_64-unknown-linux/release/cftail
+       - target/x86_64-unknown-linux-gnu/release/cftail
