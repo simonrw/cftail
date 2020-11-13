@@ -1,0 +1,45 @@
+# This file is a template, and might need editing before it works on your project.
+# Official language image. Look for the different tagged releases at:
+# https://hub.docker.com/r/library/rust/tags/
+image: "rust:latest"
+
+stages:
+    - test
+    - build_binaries
+
+# Optional: Pick zero or more services to be used on all builds.
+# Only needed when using a docker container to run your tests in.
+# Check out: http://docs.gitlab.com/ee/ci/docker/using_docker_images.html#what-is-a-service
+# services:
+#   - mysql:latest
+#   - redis:latest
+#   - postgres:latest
+
+# Optional: Install a C compiler, cmake and git into the container.
+# You will often need this when you (or any of your dependencies) depends on C code.
+# before_script:
+#   - apt-get update -yqq
+#   - apt-get install -yqq --no-install-recommends build-essential
+
+.caching_rust: &caching_rust
+  cache:
+    paths:
+      - .cargo/
+      - target/x86_64-unknown-linux/release
+
+# Use cargo to test the project
+test:cargo:
+  stage: test
+  <<: *caching_rust
+  script:
+    - rustc --version && cargo --version  # Print version info for debugging
+    - cargo test --workspace --verbose
+
+build_linux:
+  stage: build_binaries
+  <<: *caching_rust
+  script:
+    - cargo build --release --target x86_64-unknown-linux
+  artifacts:
+     paths:
+       - target/x86_64-unknown-linux/release/cftail
