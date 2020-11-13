@@ -1,7 +1,7 @@
 # This file is a template, and might need editing before it works on your project.
 # Official language image. Look for the different tagged releases at:
 # https://hub.docker.com/r/library/rust/tags/
-image: "rust:latest"
+image: "rust:1.47.0"
 
 stages:
     - test
@@ -24,6 +24,7 @@ stages:
 .caching_rust: &caching_rust
   cache:
     paths:
+      - osxcross
       - .cargo/
       - /root/.cargo
       - target
@@ -46,3 +47,12 @@ build_linux:
   artifacts:
      paths:
        - target/x86_64-unknown-linux-gnu/release/cftail
+
+build_macos:
+  stage: build_binaries
+  <<: *caching_rust
+  script:
+    - bash ./bin/crosscompile.sh
+  artifacts:
+    paths:
+      - target/x86_64-apple-darwin/release/cftail
