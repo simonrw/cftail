@@ -25,7 +25,8 @@ stages:
   cache:
     paths:
       - .cargo/
-      - target/x86_64-unknown-linux/release
+      - /root/.cargo
+      - target
 
 # Use cargo to test the project
 test:cargo:
@@ -33,7 +34,7 @@ test:cargo:
   <<: *caching_rust
   script:
     - rustc --version && cargo --version  # Print version info for debugging
-    - cargo test --workspace --verbose
+    - cargo test
 
 build_linux:
   stage: build_binaries
