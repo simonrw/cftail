@@ -161,7 +161,7 @@ where
                 spec.set_fg(Some(Color::Red));
                 self.writer.set_color(&spec).unwrap();
             }
-            _ => {}
+            s => tracing::warn!(status = s, "unhandled status message"),
         }
 
         write!(self.writer, "{}", status).expect("printing");
