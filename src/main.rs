@@ -53,7 +53,8 @@ async fn main() {
             &opts.stack_name,
             since,
         );
-        // tail.prefetch().await;
+
+        tail.prefetch().await;
 
         tracing::debug!("starting poll loop");
         match tail.poll().await {
@@ -66,7 +67,7 @@ async fn main() {
                 tracing::error!(status_code = %r.status, message = %r.body_as_str(), "error making request");
                 std::process::exit(1);
             }
-            Err(Error::Other(e)) => {
+            Err(e) => {
                 tracing::error!(err = %e, "unexpected error");
                 std::process::exit(1);
             }

@@ -47,7 +47,7 @@ where
     // Fetch all of the events since the beginning of time, so that we can ensure all
     // of the events are sorted.
     #[tracing::instrument]
-    async fn prefetch<E>(&mut self) {
+    pub(crate) async fn prefetch(&mut self) {
         let mut all_events = self
             .fetcher
             .fetch_all_events(self.stack_name)
@@ -62,6 +62,11 @@ where
                 .with_timezone(&Utc),
         );
         all_events.iter().for_each(|e| {
+            let timestamp =
+                DateTime::parse_from_rfc3339(e.timestamp.as_str()).expect("parsing timestamp");
+            if timestamp > self.since {
+                self.print_event(&e);
+            }
             self.seen_events.insert(e.event_id.clone());
         });
     }
@@ -102,7 +107,7 @@ where
 
                 if let Err(e) = res {
                     match e {
-                        rusoto_core::RusotoError::Unknown(response) => {
+                        Error::Rusoto(rusoto_core::RusotoError::Unknown(response)) => {
                             // TODO: Handle credential refreshing
                             tracing::warn!(
                                 status_code = response.status.as_u16(),
@@ -162,4 +167,13 @@ where
             }
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_print_event() {}
 }

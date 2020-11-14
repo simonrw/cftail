@@ -1,3 +1,4 @@
+use crate::error::Error;
 use crate::fetch::Fetch;
 use async_trait::async_trait;
 use chrono::prelude::*;
@@ -29,7 +30,7 @@ impl Fetch for CFClient {
         &self,
         stack_name: S,
         start_time: &DateTime<Utc>,
-    ) -> Result<Vec<StackEvent>, RusotoError<DescribeStackEventsError>>
+    ) -> Result<Vec<StackEvent>, Error>
     where
         S: Into<String> + Send,
     {
@@ -38,7 +39,12 @@ impl Fetch for CFClient {
             ..Default::default()
         };
 
-        let response = self.0.describe_stack_events(input).await?;
+        let response = self
+            .0
+            .describe_stack_events(input)
+            .await
+            .map_err(Error::Rusoto)?;
+
         Ok(response
             .stack_events
             .unwrap_or_else(|| Vec::new())
@@ -50,52 +56,62 @@ impl Fetch for CFClient {
             .collect())
     }
 
-    #[tracing::instrument]
-    async fn fetch_all_events<S>(
-        &self,
-        stack_name: S,
-    ) -> Result<Vec<StackEvent>, RusotoError<DescribeStackEventsError>>
+    // #[tracing::instrument]
+    async fn fetch_all_events<S>(&self, stack_name: S) -> Result<Vec<StackEvent>, Error>
     where
         S: Into<String> + Send + Debug,
     {
-        let mut events = Vec::new();
-        let mut next_token: Option<String> = None;
-        let stack_name = stack_name.into();
-        loop {
-            tracing::debug!(next_token = ?next_token, "fetching more events");
-            let input = DescribeStackEventsInput {
-                stack_name: Some(stack_name.clone()),
-                next_token: next_token.clone(),
-            };
+        async move {
+            let mut events = Vec::new();
+            let mut next_token: Option<String> = None;
+            let stack_name = stack_name.into();
+            loop {
+                tracing::debug!(next_token = ?next_token, "fetching more events");
+                let input = DescribeStackEventsInput {
+                    stack_name: Some(stack_name.clone()),
+                    next_token: next_token.clone(),
+                };
 
-            match self
-                .0
-                .describe_stack_events(input)
-                .instrument(tracing::debug_span!("fetching events"))
-                .await
-            {
-                Ok(response) => {
-                    match response.stack_events {
-                        Some(batch) => {
-                            events.extend_from_slice(&batch);
+                match self
+                    .0
+                    .describe_stack_events(input)
+                    .instrument(tracing::debug_span!("fetching events"))
+                    .await
+                {
+                    Ok(response) => {
+                        tracing::debug!("got successful response");
+                        match response.stack_events {
+                            Some(batch) => {
+                                events.extend_from_slice(&batch);
+                            }
+                            None => {
+                                tracing::debug!("reached end of events");
+                                break;
+                            }
                         }
-                        None => {
-                            tracing::debug!("reached end of events");
-                            break;
+
+                        match response.next_token {
+                            Some(new_next_token) => next_token = Some(new_next_token),
+                            None => break,
                         }
                     }
-
-                    if let Some(new_next_token) = response.next_token {
-                        next_token = Some(new_next_token);
+                    Err(e) => {
+                        tracing::debug!("got failed response");
+                        match e {
+                            RusotoError::Service(ref error) => {
+                                tracing::error!(err = %error, "rusoto error");
+                                return Err(Error::Rusoto(e));
+                            }
+                            _ => tracing::error!(err = ?e, "error"),
+                        }
+                        break;
                     }
-                }
-                Err(e) => {
-                    tracing::error!(err = ?e, "error fetching all events");
-                    break;
                 }
             }
+            tracing::debug!(nevents = events.len(), "got all past events");
+            Ok(events)
         }
-        tracing::debug!(nevents = events.len(), "got all past events");
-        Ok(events)
+        .instrument(tracing::debug_span!("fetching events"))
+        .await
     }
 }
