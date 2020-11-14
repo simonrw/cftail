@@ -4,6 +4,7 @@ use crate::fetch::Fetch;
 use chrono::{DateTime, Utc};
 use rusoto_cloudformation::StackEvent;
 use std::collections::HashSet;
+use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::time::Duration;
 use termcolor::{Color, ColorSpec, WriteColor};
@@ -142,26 +143,10 @@ where
 
         write!(self.writer, " | ").unwrap();
 
-        match status.as_str() {
-            "UPDATE_IN_PROGRESS" | "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS" => {
-                let mut spec = ColorSpec::new();
-                spec.set_fg(Some(Color::Blue));
-                self.writer.set_color(&spec).unwrap();
-            }
-            "UPDATE_COMPLETE" => {
-                let mut spec = ColorSpec::new();
-                spec.set_fg(Some(Color::Green));
-                self.writer.set_color(&spec).unwrap();
-            }
-            "UPDATE_FAILED"
-            | "UPDATE_ROLLBACK_IN_PROGRESS"
-            | "UPDATE_ROLLBACK_COMPLETE"
-            | "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS" => {
-                let mut spec = ColorSpec::new();
-                spec.set_fg(Some(Color::Red));
-                self.writer.set_color(&spec).unwrap();
-            }
-            s => tracing::warn!(status = s, "unhandled status message"),
+        let stack_status = crate::stack_status::StackStatus::try_from(status.as_str())
+            .expect("unhandled stack status");
+        if let Some(spec) = stack_status.color_spec() {
+            self.writer.set_color(&spec).unwrap();
         }
 
         write!(self.writer, "{}", status).expect("printing");
@@ -170,7 +155,7 @@ where
         if let Some(reason) = status_reason {
             writeln!(self.writer, " ({reason})", reason = reason).expect("printing");
         } else {
-            if status == "UPDATE_COMPLETE" && resource_name == self.stack_name {
+            if stack_status.is_complete() && resource_name == self.stack_name {
                 writeln!(self.writer, " 🎉✨🤘").expect("printing");
             } else {
                 writeln!(self.writer, "").expect("printing");

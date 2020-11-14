@@ -10,6 +10,7 @@ mod cfclient;
 mod error;
 mod exponential_backoff;
 mod fetch;
+mod stack_status;
 mod tail;
 mod writer;
 
