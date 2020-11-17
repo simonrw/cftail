@@ -46,14 +46,15 @@ where
 
     // Fetch all of the events since the beginning of time, so that we can ensure all
     // of the events are sorted.
-    #[tracing::instrument]
-    pub(crate) async fn prefetch(&mut self) {
-        let mut all_events = self
-            .fetcher
-            .fetch_all_events(self.stack_name)
-            .await
-            .unwrap();
+    #[tracing::instrument(skip(self))]
+    pub(crate) async fn prefetch(&mut self) -> Result<(), Error> {
+        let mut all_events = self.fetcher.fetch_all_events(self.stack_name).await?;
         all_events.sort_by(event_sort_key);
+
+        if all_events.is_empty() {
+            tracing::debug!("no events found");
+            return Ok(());
+        }
 
         let last_event = &all_events[all_events.len() - 1];
         self.latest_event = Some(
@@ -69,6 +70,7 @@ where
             }
             self.seen_events.insert(e.event_id.clone());
         });
+        Ok(())
     }
 
     pub(crate) async fn poll(&mut self) -> Result<(), Error> {
@@ -128,7 +130,7 @@ where
         .await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip(self, event))]
     fn print_event(&mut self, event: &rusoto_cloudformation::StackEvent) {
         let resource_name = event.logical_resource_id.as_ref().unwrap();
         let status = event.resource_status.as_ref().unwrap();

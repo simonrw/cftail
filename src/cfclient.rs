@@ -56,7 +56,7 @@ impl Fetch for CFClient {
             .collect())
     }
 
-    // #[tracing::instrument]
+    #[tracing::instrument(skip(self))]
     async fn fetch_all_events<S>(&self, stack_name: S) -> Result<Vec<StackEvent>, Error>
     where
         S: Into<String> + Send + Debug,
@@ -102,7 +102,11 @@ impl Fetch for CFClient {
                                 tracing::error!(err = %error, "rusoto error");
                                 return Err(Error::Rusoto(e));
                             }
-                            _ => tracing::error!(err = ?e, "error"),
+                            RusotoError::Credentials(ref creds) => {
+                                tracing::error!(creds = ?creds, "credentials err");
+                                return Err(Error::Aws(crate::error::AwsError::NoCredentials));
+                            }
+                            _ => tracing::error!(err = ?e, "other sort of error"),
                         }
                         break;
                     }

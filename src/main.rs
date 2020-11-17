@@ -54,12 +54,26 @@ async fn main() {
             since,
         );
 
-        tail.prefetch().await;
+        match tail.prefetch().await {
+            Ok(_) => {}
+            Err(Error::Aws(error::AwsError::CredentialExpired)) => {
+                eprintln!("Your credentials have expired");
+                std::process::exit(1);
+            }
+            Err(Error::Aws(error::AwsError::NoCredentials)) => {
+                eprintln!("No valid credentials found");
+                std::process::exit(1);
+            }
+            Err(e) => {
+                eprintln!("unknown error: {:?}", e);
+                std::process::exit(1);
+            }
+        }
 
         tracing::debug!("starting poll loop");
         match tail.poll().await {
             Ok(_) => unreachable!(),
-            Err(Error::CredentialTimeout) => {
+            Err(Error::Aws(error::AwsError::RateLimitExceeded)) => {
                 delay_for(Duration::from_secs(5)).await;
                 continue;
             }
