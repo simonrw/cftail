@@ -1,8 +1,7 @@
 use crate::error::Error;
 use async_trait::async_trait;
 use chrono::prelude::*;
-use rusoto_cloudformation::{DescribeStackEventsError, StackEvent};
-use rusoto_core::RusotoError;
+use rusoto_cloudformation::StackEvent;
 use std::fmt::Debug;
 
 #[async_trait]

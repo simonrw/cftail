@@ -66,7 +66,7 @@ where
             let timestamp =
                 DateTime::parse_from_rfc3339(e.timestamp.as_str()).expect("parsing timestamp");
             if timestamp > self.since {
-                self.print_event(&e);
+                self.print_event(&e).expect("printing");
             }
             self.seen_events.insert(e.event_id.clone());
         });
@@ -101,7 +101,7 @@ where
                             continue;
                         }
 
-                        self.print_event(&event);
+                        self.print_event(&event).expect("printing");
 
                         self.seen_events.insert(event.event_id);
                     }
@@ -131,43 +131,45 @@ where
     }
 
     #[tracing::instrument(skip(self, event))]
-    fn print_event(&mut self, event: &rusoto_cloudformation::StackEvent) {
+    fn print_event(&mut self, event: &rusoto_cloudformation::StackEvent) -> Result<(), Error> {
         let resource_name = event.logical_resource_id.as_ref().unwrap();
         let status = event.resource_status.as_ref().unwrap();
         let timestamp = &event.timestamp;
         let status_reason = event.resource_status_reason.as_ref();
 
-        write!(self.writer, "{timestamp}: ", timestamp = timestamp).unwrap();
+        write!(self.writer, "{timestamp}: ", timestamp = timestamp).map_err(|_| Error::Printing)?;
         if resource_name == self.stack_name {
             let mut spec = ColorSpec::new();
             spec.set_fg(Some(Color::Yellow));
             self.writer.set_color(&spec).unwrap();
-            write!(self.writer, "{name}", name = resource_name).unwrap();
-            self.writer.reset().unwrap();
+            write!(self.writer, "{name}", name = resource_name).map_err(|_| Error::Printing)?;
+            self.writer.reset().map_err(|_| Error::Printing)?;
         } else {
-            write!(self.writer, "{name}", name = resource_name).unwrap();
+            write!(self.writer, "{name}", name = resource_name).map_err(|_| Error::Printing)?;
         }
 
-        write!(self.writer, " | ").unwrap();
+        write!(self.writer, " | ").map_err(|_| Error::Printing)?;
 
         let stack_status = crate::stack_status::StackStatus::try_from(status.as_str())
             .expect("unhandled stack status");
         if let Some(spec) = stack_status.color_spec() {
-            self.writer.set_color(&spec).unwrap();
+            self.writer.set_color(&spec).map_err(|_| Error::Printing)?;
         }
 
         write!(self.writer, "{}", status).expect("printing");
-        self.writer.reset().unwrap();
+        self.writer.reset().map_err(|_| Error::Printing)?;
 
         if let Some(reason) = status_reason {
-            writeln!(self.writer, " ({reason})", reason = reason).expect("printing");
+            writeln!(self.writer, " ({reason})", reason = reason).map_err(|_| Error::Printing)?;
         } else {
             if stack_status.is_complete() && resource_name == self.stack_name {
-                writeln!(self.writer, " 🎉✨🤘").expect("printing");
+                writeln!(self.writer, " 🎉✨🤘").map_err(|_| Error::Printing)?;
             } else {
-                writeln!(self.writer, "").expect("printing");
+                writeln!(self.writer, "").map_err(|_| Error::Printing)?;
             }
         }
+
+        Ok(())
     }
 }
 

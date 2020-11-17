@@ -3,8 +3,7 @@ use crate::fetch::Fetch;
 use async_trait::async_trait;
 use chrono::prelude::*;
 use rusoto_cloudformation::{
-    CloudFormation, CloudFormationClient, DescribeStackEventsError, DescribeStackEventsInput,
-    StackEvent,
+    CloudFormation, CloudFormationClient, DescribeStackEventsInput, StackEvent,
 };
 use rusoto_core::RusotoError;
 use std::fmt::Debug;
