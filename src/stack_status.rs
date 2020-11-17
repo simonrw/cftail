@@ -8,6 +8,7 @@ pub(crate) enum StackStatus {
     CreateFailed,
     DeleteComplete,
     DeleteFailed,
+    DeleteSkipped,
     DeleteInProgress,
     ReviewInProgress,
     RollbackComplete,
@@ -59,6 +60,7 @@ impl TryFrom<&str> for StackStatus {
             "IMPORT_ROLLBACK_IN_PROGRESS" => Ok(ImportRollbackInProgress),
             "IMPORT_ROLLBACK_FAILED" => Ok(ImportRollbackFailed),
             "IMPORT_ROLLBACK_COMPLETE" => Ok(ImportRollbackComplete),
+            "DELETE_SKIPPED" => Ok(DeleteSkipped),
             _ => unreachable!("{}", value),
         }
     }
@@ -70,6 +72,7 @@ impl StackStatus {
         match self {
             Self::CreateInProgress
             | Self::DeleteInProgress
+            | Self::DeleteSkipped
             | Self::ReviewInProgress
             | Self::RollbackInProgress
             | Self::UpdateInProgress
