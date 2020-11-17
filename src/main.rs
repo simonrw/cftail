@@ -75,7 +75,6 @@ async fn main() {
             Ok(_) => unreachable!(),
             Err(Error::Aws(error::AwsError::RateLimitExceeded)) => {
                 delay_for(Duration::from_secs(5)).await;
-                continue;
             }
             Err(Error::Http(r)) => {
                 tracing::error!(status_code = %r.status, message = %r.body_as_str(), "error making request");
@@ -86,5 +85,7 @@ async fn main() {
                 std::process::exit(1);
             }
         }
+
+        tracing::trace!("building another client");
     }
 }
