@@ -56,6 +56,7 @@ pub(crate) enum Error {
     CredentialTimeout,
     Http(BufferedHttpResponse),
     Rusoto(RusotoError<DescribeStackEventsError>),
+    Aws(AwsError),
     Other(Box<dyn std::error::Error>),
 }
 
@@ -66,6 +67,7 @@ impl std::fmt::Display for Error {
             Error::Http(_) => f.write_str("http error"),
             Error::Rusoto(_) => f.write_str("rusoto error"),
             Error::Other(e) => f.write_fmt(format_args!("other error: {}", e)),
+            Error::Aws(e) => f.write_fmt(format_args!("aws error: {:?}", e)),
         }
     }
 }
