@@ -1,4 +1,4 @@
-use crate::exponential_backoff::backoff;
+// use crate::exponential_backoff::backoff;
 use chrono::{DateTime, Utc};
 use eyre::{Result, WrapErr};
 use rusoto_cloudformation::{
@@ -14,7 +14,7 @@ use termcolor::{Color, ColorSpec, WriteColor};
 use tokio::time::delay_for;
 use tracing::Instrument;
 
-use crate::error::{AwsError, Error};
+use crate::error::Error;
 
 fn event_sort_key(a: &StackEvent, b: &StackEvent) -> std::cmp::Ordering {
     let a_timestamp = DateTime::parse_from_rfc3339(&a.timestamp).unwrap();
@@ -100,11 +100,11 @@ where
                         }
                         RusotoError::Credentials(ref creds) => {
                             tracing::error!(creds = ?creds, "credentials err");
-                            return Err(Error::Aws(crate::error::AwsError::NoCredentials));
+                            return Err(Error::NoCredentials);
                         }
                         _ => {
                             tracing::error!(err = ?e, "other sort of error");
-                            return Err(Error::Other(Box::new(e)));
+                            return Err(Error::Other(format!("{:?}", e)));
                         }
                     }
                 }
@@ -145,14 +145,17 @@ where
         loop {
             if let Err(e) = self.poll_step().await {
                 match e {
-                    Error::Aws(AwsError::RateLimitExceeded) => {
-                        tracing::warn!("rate limit exceeded");
-                        delay_for(Duration::from_secs(10)).await;
-                    }
+                    // Error::Aws(AwsError::RateLimitExceeded) => {
+                    //     tracing::warn!("rate limit exceeded");
+                    //     delay_for(Duration::from_secs(10)).await;
+                    // }
                     // Surface the expired credentials up to the main outer loop so that a new
                     // client can be constructed.
-                    Error::Aws(AwsError::CredentialExpired) => return Err(e),
-                    _ => tracing::error!(err = %e, "unhandled error"),
+                    // Error::Aws(AwsError::CredentialExpired) => return Err(e),
+                    _ => {
+                        tracing::error!(err = %e, "unhandled error");
+                        return Err(e);
+                    }
                 }
             }
 
@@ -252,7 +255,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::prelude::*;
+    use chrono::TimeZone;
     use rusoto_mock::{
         MockCredentialsProvider, MockRequestDispatcher, MockResponseReader, ReadMockResponse,
     };
