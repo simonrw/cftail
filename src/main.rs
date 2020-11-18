@@ -74,15 +74,15 @@ async fn main() {
             Ok(_) => {}
             Err(e) => match e.downcast_ref::<Error>() {
                 Some(Error::NoCredentials) => {
-                    eprintln!("No valid credentials found");
+                    eprintln!("Error: no valid credentials found");
                     std::process::exit(1);
                 }
                 Some(Error::NoStack) => {
-                    eprintln!("could not find stack {}", opts.stack_name);
+                    eprintln!("Error: could not find stack {}", opts.stack_name);
                     std::process::exit(1);
                 }
                 Some(Error::CredentialsExpired) => {
-                    eprintln!("Your credentials have expired");
+                    eprintln!("Error: your credentials have expired");
                     std::process::exit(1);
                 }
                 Some(Error::RateLimitExceeded) => {
@@ -90,11 +90,11 @@ async fn main() {
                     delay_for(Duration::from_secs(5)).await;
                 }
                 Some(e) => {
-                    eprintln!("unknown error: {:?}", e);
+                    eprintln!("Error: unknown error: {:?}", e);
                     std::process::exit(1);
                 }
                 None => {
-                    eprintln!("unknown error: {:?}", e);
+                    eprintln!("Error: unknown error: {:?}", e);
                     std::process::exit(1);
                 }
             },
@@ -104,7 +104,8 @@ async fn main() {
         match tail.poll().await {
             Ok(_) => unreachable!(),
             Err(Error::CredentialsExpired) => {
-                tracing::warn!("credentials expired");
+                eprintln!("Error: your credentials have expired");
+                std::process::exit(1);
             }
             Err(Error::RateLimitExceeded) => {
                 tracing::warn!("rate limit exceeded");
