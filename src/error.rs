@@ -3,11 +3,15 @@ use rusoto_core::{request::BufferedHttpResponse, RusotoError};
 use serde::Deserialize;
 use std::str::FromStr;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(thiserror::Error, PartialEq, Eq, Debug)]
 pub(crate) enum AwsError {
+    #[error("credentials expired")]
     CredentialExpired,
+    #[error("rate limiting")]
     RateLimitExceeded,
+    #[error("no credentials found")]
     NoCredentials,
+    #[error("could not find stack")]
     NoStack,
 }
 
@@ -54,28 +58,34 @@ impl FromStr for ErrorResponse {
     }
 }
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
+    #[error("http error")]
     Http(BufferedHttpResponse),
-    Rusoto(RusotoError<DescribeStackEventsError>),
-    Aws(AwsError),
+    #[error("rusoto error {0}")]
+    Rusoto(#[from] RusotoError<DescribeStackEventsError>),
+    #[error("aws error {0:?}")]
+    Aws(#[from] AwsError),
+    #[error("error printing")]
     Printing,
+    #[error("error parsing --since argument")]
     ParseSince,
+    #[error("other error {0}")]
     Other(Box<dyn std::error::Error>),
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Http(_) => f.write_str("http error"),
-            Error::Rusoto(_) => f.write_str("rusoto error"),
-            Error::Aws(e) => f.write_fmt(format_args!("aws error: {:?}", e)),
-            Error::Printing => f.write_str("printing"),
-            Error::ParseSince => f.write_str("could not parse --since argument"),
-            Error::Other(e) => f.write_fmt(format_args!("other error: {}", e)),
-        }
-    }
-}
+// impl std::fmt::Display for Error {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         match self {
+//             Error::Http(_) => f.write_str("http error"),
+//             Error::Rusoto(_) => f.write_str("rusoto error"),
+//             Error::Aws(e) => f.write_fmt(format_args!("aws error: {:?}", e)),
+//             Error::Printing => f.write_str("printing"),
+//             Error::ParseSince => f.write_str("could not parse --since argument"),
+//             Error::Other(e) => f.write_fmt(format_args!("other error: {}", e)),
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

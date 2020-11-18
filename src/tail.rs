@@ -1,5 +1,6 @@
 use crate::exponential_backoff::backoff;
 use chrono::{DateTime, Utc};
+use eyre::{Result, WrapErr};
 use rusoto_cloudformation::{
     CloudFormation, CloudFormationClient, DescribeStackEventsInput, StackEvent,
 };
@@ -64,6 +65,8 @@ where
                 stack_name: Some(self.stack_name.to_string()),
                 next_token: next_token.clone(),
             };
+
+            tracing::debug!(input = ?input, "sending request with payload");
 
             match self
                 .fetcher
@@ -194,41 +197,51 @@ where
     }
 
     #[tracing::instrument(skip(self, event))]
-    fn print_event(&mut self, event: &rusoto_cloudformation::StackEvent) -> Result<(), Error> {
-        let resource_name = event.logical_resource_id.as_ref().unwrap();
-        let status = event.resource_status.as_ref().unwrap();
+    fn print_event(&mut self, event: &rusoto_cloudformation::StackEvent) -> Result<()> {
+        let resource_name = event
+            .logical_resource_id
+            .as_ref()
+            .expect("could not find logical_resource_id in response");
+        let status = event
+            .resource_status
+            .as_ref()
+            .expect("could not find resource_status in response");
         let timestamp = &event.timestamp;
         let status_reason = event.resource_status_reason.as_ref();
 
-        write!(self.writer, "{timestamp}: ", timestamp = timestamp).map_err(|_| Error::Printing)?;
+        write!(self.writer, "{timestamp}: ", timestamp = timestamp)
+            .wrap_err("printing timestamp")?;
         if resource_name == self.stack_name {
             let mut spec = ColorSpec::new();
             spec.set_fg(Some(Color::Yellow));
             self.writer.set_color(&spec).unwrap();
-            write!(self.writer, "{name}", name = resource_name).map_err(|_| Error::Printing)?;
-            self.writer.reset().map_err(|_| Error::Printing)?;
+            write!(self.writer, "{name}", name = resource_name)
+                .wrap_err("printing resource name")?;
+            self.writer.reset().wrap_err("resetting colour")?;
         } else {
-            write!(self.writer, "{name}", name = resource_name).map_err(|_| Error::Printing)?;
+            write!(self.writer, "{name}", name = resource_name)
+                .wrap_err("printing resource name")?;
         }
 
-        write!(self.writer, " | ").map_err(|_| Error::Printing)?;
+        write!(self.writer, " | ").wrap_err("printing pipe character")?;
 
         let stack_status = crate::stack_status::StackStatus::try_from(status.as_str())
             .expect("unhandled stack status");
         if let Some(spec) = stack_status.color_spec() {
-            self.writer.set_color(&spec).map_err(|_| Error::Printing)?;
+            self.writer.set_color(&spec).wrap_err("setting color")?;
         }
 
-        write!(self.writer, "{}", status).expect("printing");
-        self.writer.reset().map_err(|_| Error::Printing)?;
+        write!(self.writer, "{}", status).expect("printing status");
+        self.writer.reset().wrap_err("resetting colour")?;
 
         if let Some(reason) = status_reason {
-            writeln!(self.writer, " ({reason})", reason = reason).map_err(|_| Error::Printing)?;
+            writeln!(self.writer, " ({reason})", reason = reason)
+                .wrap_err("printing failure reason")?;
         } else {
             if stack_status.is_complete() && resource_name == self.stack_name {
-                writeln!(self.writer, " 🎉✨🤘").map_err(|_| Error::Printing)?;
+                writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
             } else {
-                writeln!(self.writer, "").map_err(|_| Error::Printing)?;
+                writeln!(self.writer, "").wrap_err("printing end of event")?;
             }
         }
 
@@ -248,8 +261,8 @@ mod tests {
     struct StubWriter;
 
     impl std::io::Write for StubWriter {
-        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
-            Ok(0)
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            Ok(buf.len())
         }
 
         fn flush(&mut self) -> std::io::Result<()> {
@@ -259,7 +272,7 @@ mod tests {
 
     impl WriteColor for StubWriter {
         fn supports_color(&self) -> bool {
-            false
+            true
         }
 
         fn set_color(&mut self, _spec: &ColorSpec) -> std::io::Result<()> {
@@ -272,32 +285,35 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore]
     async fn test_prefetch() {
         tracing_subscriber::fmt::init();
-        let client = client_from("tests/responses", "single_event.xml");
+
+        let response = MockResponseReader::read_response("tests/responses", "single_event.xml");
+        let dispatcher = MockRequestDispatcher::with_status(200).with_body(&response);
+        let client =
+            CloudFormationClient::new_with(dispatcher, MockCredentialsProvider, Default::default());
         let mut seen_events = HashSet::new();
         let mut tail = Tail::new(
             &client,
             StubWriter {},
-            "",
+            "SampleStack",
             Utc.timestamp(0, 0),
             &mut seen_events,
         );
 
         tail.prefetch().await.unwrap();
+
+        assert_eq!(seen_events.len(), 1);
     }
 
     #[tokio::test]
     async fn test_poll() {}
 
     fn client_from(dirname: &str, filename: &str) -> CloudFormationClient {
-        let response = MockResponseReader::read_response(dirname, filename);
-        let client = CloudFormationClient::new_with(
-            MockRequestDispatcher::default().with_body(&response),
-            MockCredentialsProvider,
-            Default::default(),
-        );
+        let response = dbg!(MockResponseReader::read_response(dirname, filename));
+        let dispatcher = MockRequestDispatcher::with_status(200).with_body(&response);
+        let client =
+            CloudFormationClient::new_with(dispatcher, MockCredentialsProvider, Default::default());
         client
     }
 
