@@ -103,18 +103,24 @@ async fn main() {
         tracing::debug!("starting poll loop");
         match tail.poll().await {
             Ok(_) => unreachable!(),
-            Err(Error::CredentialsExpired) => {
-                eprintln!("Error: your credentials have expired");
-                std::process::exit(1);
-            }
-            Err(Error::RateLimitExceeded) => {
-                tracing::warn!("rate limit exceeded");
-                delay_for(Duration::from_secs(5)).await;
-            }
-            Err(e) => {
-                tracing::error!(err = %e, "unexpected error");
-                std::process::exit(1);
-            }
+            Err(e) => match e.downcast_ref::<Error>() {
+                Some(Error::CredentialsExpired) => {
+                    eprintln!("Error: your credentials have expired");
+                    std::process::exit(1);
+                }
+                Some(Error::RateLimitExceeded) => {
+                    tracing::warn!("rate limit exceeded");
+                    delay_for(Duration::from_secs(5)).await;
+                }
+                Some(e) => {
+                    tracing::error!(err = %e, "unexpected error");
+                    std::process::exit(1);
+                }
+                None => {
+                    tracing::error!(err = %e, "unexpected error");
+                    std::process::exit(1);
+                }
+            },
         }
 
         tracing::trace!("building another client");

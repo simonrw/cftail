@@ -153,7 +153,7 @@ where
     }
 
     #[tracing::instrument(skip(self))]
-    pub(crate) async fn poll(&mut self) -> Result<(), Error> {
+    pub(crate) async fn poll(&mut self) -> Result<()> {
         tracing::debug!(start_time = ?self.since, "showing logs from now");
 
         loop {
@@ -179,7 +179,7 @@ where
     }
 
     #[tracing::instrument(skip(self))]
-    async fn poll_step(&mut self) -> Result<(), Error> {
+    async fn poll_step(&mut self) -> Result<()> {
         let input = DescribeStackEventsInput {
             stack_name: Some(self.stack_name.to_string()),
             ..Default::default()
@@ -195,7 +195,7 @@ where
         events.sort_by(event_sort_key);
         for event in events.into_iter() {
             let timestamp =
-                DateTime::<Utc>::from_str(&event.timestamp).expect("parsing event time");
+                DateTime::<Utc>::from_str(&event.timestamp).wrap_err("parsing event time")?;
             // Filter on timestamp
             if timestamp < self.since {
                 continue;
@@ -205,7 +205,7 @@ where
                 continue;
             }
 
-            self.print_event(&event).expect("printing");
+            self.print_event(&event).wrap_err("printing")?;
 
             self.seen_events.insert(event.event_id);
         }
