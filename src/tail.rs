@@ -8,6 +8,7 @@ use rusoto_core::RusotoError;
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fmt::Debug;
+use std::str::FromStr;
 use std::time::Duration;
 use termcolor::{Color, ColorSpec, WriteColor};
 use tokio::time::delay_for;
@@ -132,60 +133,41 @@ where
     pub(crate) async fn poll(&mut self) -> Result<(), Error> {
         tracing::debug!(start_time = ?self.since, "showing logs from now");
 
-        todo!();
+        loop {
+            // let res = backoff(5, || {
+            let input = DescribeStackEventsInput {
+                stack_name: Some(self.stack_name.to_string()),
+                ..Default::default()
+            };
 
-        // async move {
-        //     loop {
-        //         let res = backoff(5, || {
-        //             self.fetcher
-        //                 .fetch_events_since(self.stack_name, &self.since)
-        //         })
-        //         .instrument(tracing::trace_span!("backoff"))
-        //         .await;
+            let res = self
+                .fetcher
+                .describe_stack_events(input)
+                .await
+                .map_err(Error::Rusoto)?;
 
-        //         let res = res.map(|events| {
-        //             let mut events = events.clone();
-        //             tracing::debug!(nevents = events.len(), "found new events");
-        //             events.sort_by(event_sort_key);
-        //             for event in events.into_iter() {
-        //                 let timestamp = DateTime::parse_from_rfc3339(&event.timestamp)
-        //                     .expect("parsing event time");
-        //                 // Filter on timestamp
-        //                 if timestamp < self.since {
-        //                     continue;
-        //                 }
+            let mut events = res.stack_events.unwrap_or_else(|| Vec::new());
+            events.sort_by(event_sort_key);
+            for event in events.into_iter() {
+                let timestamp =
+                    DateTime::<Utc>::from_str(&event.timestamp).expect("parsing event time");
+                // Filter on timestamp
+                if timestamp < self.since {
+                    continue;
+                }
 
-        //                 if self.seen_events.contains(&event.event_id) {
-        //                     continue;
-        //                 }
+                if self.seen_events.contains(&event.event_id) {
+                    continue;
+                }
 
-        //                 self.print_event(&event).expect("printing");
+                self.print_event(&event).expect("printing");
 
-        //                 self.seen_events.insert(event.event_id);
-        //             }
-        //         });
+                self.seen_events.insert(event.event_id);
+            }
 
-        //         if let Err(e) = res {
-        //             match e {
-        //                 Error::Rusoto(rusoto_core::RusotoError::Unknown(response)) => {
-        //                     // TODO: Handle credential refreshing
-        //                     tracing::warn!(
-        //                         status_code = response.status.as_u16(),
-        //                         message = response.body_as_str(),
-        //                         "HTTP error"
-        //                     );
-        //                     return Err(Error::Http(response));
-        //                 }
-        //                 _ => tracing::warn!(err = ?e, "unexpected error"),
-        //             }
-        //         }
-
-        //         tracing::trace!("sleeping");
-        //         delay_for(Duration::from_secs(5)).await;
-        //     }
-        // }
-        // .instrument(tracing::debug_span!("poll-loop"))
-        // .await
+            tracing::trace!("sleeping");
+            delay_for(Duration::from_secs(5)).await;
+        }
     }
 
     #[tracing::instrument(skip(self, event))]
