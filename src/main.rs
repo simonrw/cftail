@@ -23,7 +23,7 @@ struct Opts {
     stack_name: String,
 
     #[structopt(short, long)]
-    since: Option<i64>,
+    since: Option<DateTime<Utc>>,
 }
 
 #[tokio::main]
@@ -31,10 +31,7 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let opts = Opts::from_args();
-    let since = opts
-        .since
-        .map(|s| Utc.timestamp(s, 0))
-        .unwrap_or_else(|| Utc::now());
+    let since = opts.since.unwrap_or_else(|| Utc::now());
 
     tracing::info!(stack_name = %opts.stack_name, since = %since, "tailing stack events");
 
