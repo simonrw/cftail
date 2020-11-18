@@ -1,7 +1,10 @@
 use crate::error::Error;
 use crate::exponential_backoff::backoff;
 use chrono::{DateTime, Utc};
-use rusoto_cloudformation::{CloudFormationClient, StackEvent};
+use rusoto_cloudformation::{
+    CloudFormation, CloudFormationClient, DescribeStackEventsInput, StackEvent,
+};
+use rusoto_core::RusotoError;
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -50,9 +53,57 @@ where
     // of the events are sorted.
     #[tracing::instrument(skip(self))]
     pub(crate) async fn prefetch(&mut self) -> Result<(), Error> {
-        todo!();
-        /*
-        let mut all_events = self.fetcher.fetch_all_events(self.stack_name).await?;
+        let mut all_events = Vec::new();
+        let mut next_token: Option<String> = None;
+        loop {
+            tracing::debug!(next_token = ?next_token, "fetching more events");
+            let input = DescribeStackEventsInput {
+                stack_name: Some(self.stack_name.to_string()),
+                next_token: next_token.clone(),
+            };
+
+            match self
+                .fetcher
+                .describe_stack_events(input)
+                .instrument(tracing::debug_span!("fetching events"))
+                .await
+            {
+                Ok(response) => {
+                    tracing::debug!("got successful response");
+                    match response.stack_events {
+                        Some(batch) => {
+                            all_events.extend_from_slice(&batch);
+                        }
+                        None => {
+                            tracing::debug!("reached end of events");
+                            break;
+                        }
+                    }
+
+                    match response.next_token {
+                        Some(new_next_token) => next_token = Some(new_next_token),
+                        None => break,
+                    }
+                }
+                Err(e) => {
+                    tracing::debug!("got failed response");
+                    match e {
+                        RusotoError::Service(ref error) => {
+                            tracing::error!(err = %error, "rusoto error");
+                            return Err(Error::Rusoto(e));
+                        }
+                        RusotoError::Credentials(ref creds) => {
+                            tracing::error!(creds = ?creds, "credentials err");
+                            return Err(Error::Aws(crate::error::AwsError::NoCredentials));
+                        }
+                        _ => tracing::error!(err = ?e, "other sort of error"),
+                    }
+                }
+            }
+        }
+
+        tracing::debug!(nevents = all_events.len(), "got all past events");
+
         all_events.sort_by(event_sort_key);
 
         if all_events.is_empty() {
@@ -66,16 +117,16 @@ where
                 .unwrap()
                 .with_timezone(&Utc),
         );
-        all_events.iter().for_each(|e| {
+
+        for e in &all_events {
             let timestamp =
                 DateTime::parse_from_rfc3339(e.timestamp.as_str()).expect("parsing timestamp");
             if timestamp > self.since {
                 self.print_event(&e).expect("printing");
             }
             self.seen_events.insert(e.event_id.clone());
-        });
+        }
         Ok(())
-        */
     }
 
     pub(crate) async fn poll(&mut self) -> Result<(), Error> {
