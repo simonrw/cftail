@@ -10,7 +10,6 @@ use termcolor::{ColorChoice, StandardStream};
 use tokio::time::delay_for;
 
 mod error;
-mod exponential_backoff;
 mod stack_status;
 mod tail;
 mod writer;

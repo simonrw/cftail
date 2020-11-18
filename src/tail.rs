@@ -1,4 +1,3 @@
-// use crate::exponential_backoff::backoff;
 use chrono::{DateTime, Utc};
 use eyre::{Result, WrapErr};
 use rusoto_cloudformation::{
@@ -67,13 +66,13 @@ where
             };
 
             tracing::debug!(input = ?input, "sending request with payload");
-
-            match self
+            let res = self
                 .fetcher
-                .describe_stack_events(input)
+                .describe_stack_events(input.clone())
                 .instrument(tracing::debug_span!("fetching events"))
-                .await
-            {
+                .await;
+
+            match res {
                 Ok(response) => {
                     tracing::debug!("got successful response");
                     match response.stack_events {
