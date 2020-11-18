@@ -64,6 +64,10 @@ async fn main() {
                 eprintln!("No valid credentials found");
                 std::process::exit(1);
             }
+            Err(Error::Aws(error::AwsError::NoStack)) => {
+                eprintln!("could not find stack {}", opts.stack_name);
+                std::process::exit(1);
+            }
             Err(e) => {
                 eprintln!("unknown error: {:?}", e);
                 std::process::exit(1);

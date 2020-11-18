@@ -8,6 +8,7 @@ pub(crate) enum AwsError {
     CredentialExpired,
     RateLimitExceeded,
     NoCredentials,
+    NoStack,
 }
 
 impl FromStr for AwsError {
@@ -18,6 +19,7 @@ impl FromStr for AwsError {
         match error_response.error.code.as_str() {
             "Throttling" => Ok(Self::RateLimitExceeded),
             "ExpiredToken" => Ok(Self::CredentialExpired),
+            "ValidationError" => Ok(Self::NoStack),
             _ => Err(format!(
                 "unknown response error type: {}",
                 error_response.error.code
@@ -95,6 +97,15 @@ mod tests {
 
             assert_eq!(AwsError::from_str(message).unwrap(), expected);
         }
+
+        #[test]
+        fn parse_stack_does_not_exist() {
+            let message = stack_does_not_exist();
+
+            let expected = AwsError::NoStack;
+
+            assert_eq!(AwsError::from_str(message).unwrap(), expected);
+        }
     }
 
     mod error_response {
@@ -152,5 +163,16 @@ mod tests {
             </Error>
             <RequestId>989a8c1f-735f-443e-8a77-ac87abf2b027</RequestId>
         </ErrorResponse>"
+    }
+
+    fn stack_does_not_exist() -> &'static str {
+        "<ErrorResponse xmlns=\"http://cloudformation.amazonaws.com/doc/2010-05-15/\">
+           <Error>
+               <Type>Sender</Type>
+               <Code>ValidationError</Code>
+               <Message>Stack [test-stack] does not exist</Message>
+           </Error>
+           <RequestId>7c6bbd3b-ff75-4fc3-a802-6459af5f3ca5</RequestId>
+         </ErrorResponse>"
     }
 }
