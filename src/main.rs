@@ -1,6 +1,7 @@
 use chrono::prelude::*;
 use rusoto_cloudformation::CloudFormationClient;
 use rusoto_core::Region;
+use std::str::FromStr;
 use std::time::Duration;
 use structopt::StructOpt;
 use termcolor::{ColorChoice, StandardStream};
@@ -18,12 +19,32 @@ use error::Error;
 use tail::Tail;
 use writer::Writer;
 
+// Custom parser for parsing the datetime as either a timestamp, or as a handy string.
+fn parse_since_argument(src: &str) -> Result<DateTime<Utc>, Error> {
+    // Try to parse as datetime
+    if let Ok(dt) = DateTime::from_str(src) {
+        return Ok(dt);
+    }
+
+    // Try to parse as naive datetime (and assume UTC)
+    if let Ok(dt) = NaiveDateTime::from_str(src).map(|n| DateTime::<Utc>::from_utc(n, Utc)) {
+        return Ok(dt);
+    }
+
+    // Try to parse as timestamp
+    if let Ok(dt) = src.parse::<i64>().map(|i| Utc.timestamp(i, 0)) {
+        return Ok(dt);
+    }
+
+    Err(Error::ParseSince)
+}
+
 #[derive(StructOpt)]
 struct Opts {
     stack_name: String,
 
-    #[structopt(short, long)]
-    since: Option<i64>,
+    #[structopt(short, long, parse(try_from_str = parse_since_argument))]
+    since: Option<DateTime<Utc>>,
 }
 
 #[tokio::main]
@@ -31,10 +52,7 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let opts = Opts::from_args();
-    let since = opts
-        .since
-        .map(|s| Utc.timestamp(s, 0))
-        .unwrap_or_else(|| Utc::now());
+    let since = opts.since.unwrap_or_else(|| Utc::now());
 
     tracing::info!(stack_name = %opts.stack_name, since = %since, "tailing stack events");
 

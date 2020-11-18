@@ -60,6 +60,7 @@ pub(crate) enum Error {
     Rusoto(RusotoError<DescribeStackEventsError>),
     Aws(AwsError),
     Printing,
+    ParseSince,
 }
 
 impl std::fmt::Display for Error {
@@ -69,6 +70,7 @@ impl std::fmt::Display for Error {
             Error::Rusoto(_) => f.write_str("rusoto error"),
             Error::Aws(e) => f.write_fmt(format_args!("aws error: {:?}", e)),
             Error::Printing => f.write_str("printing"),
+            Error::ParseSince => f.write_str("could not parse --since argument"),
         }
     }
 }
