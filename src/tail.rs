@@ -157,18 +157,19 @@ where
 
         loop {
             if let Err(e) = self.poll_step().await {
-                match e {
-                    // Error::Aws(AwsError::RateLimitExceeded) => {
-                    //     tracing::warn!("rate limit exceeded");
-                    //     delay_for(Duration::from_secs(10)).await;
-                    // }
-                    // Surface the expired credentials up to the main outer loop so that a new
-                    // client can be constructed.
-                    // Error::Aws(AwsError::CredentialExpired) => return Err(e),
-                    _ => {
-                        tracing::error!(err = %e, "unhandled error");
-                        return Err(e);
-                    }
+                match e.downcast::<Error>() {
+                    Ok(e) => match e {
+                        Error::CredentialsExpired => {
+                            // We have to surface this back up to the main
+                            // function, as this will create a new client and
+                            // try again
+                            return Err(e).wrap_err("expired credentials");
+                        }
+                        _ => {
+                            tracing::warn!(err = %e, "unhandled error");
+                        }
+                    },
+                    Err(e) => tracing::error!(err = %e, "unhandled error"),
                 }
             }
 
