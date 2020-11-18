@@ -61,6 +61,7 @@ pub(crate) enum Error {
     Aws(AwsError),
     Printing,
     ParseSince,
+    Other(Box<dyn std::error::Error>),
 }
 
 impl std::fmt::Display for Error {
@@ -71,6 +72,7 @@ impl std::fmt::Display for Error {
             Error::Aws(e) => f.write_fmt(format_args!("aws error: {:?}", e)),
             Error::Printing => f.write_str("printing"),
             Error::ParseSince => f.write_str("could not parse --since argument"),
+            Error::Other(e) => f.write_fmt(format_args!("other error: {}", e)),
         }
     }
 }

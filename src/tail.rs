@@ -99,7 +99,10 @@ where
                             tracing::error!(creds = ?creds, "credentials err");
                             return Err(Error::Aws(crate::error::AwsError::NoCredentials));
                         }
-                        _ => tracing::error!(err = ?e, "other sort of error"),
+                        _ => {
+                            tracing::error!(err = ?e, "other sort of error");
+                            return Err(Error::Other(Box::new(e)));
+                        }
                     }
                 }
             }
@@ -236,11 +239,67 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher, MockResponseReader};
+    use chrono::prelude::*;
+    use rusoto_mock::{
+        MockCredentialsProvider, MockRequestDispatcher, MockResponseReader, ReadMockResponse,
+    };
+
+    #[derive(Debug)]
+    struct StubWriter;
+
+    impl std::io::Write for StubWriter {
+        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+            Ok(0)
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl WriteColor for StubWriter {
+        fn supports_color(&self) -> bool {
+            false
+        }
+
+        fn set_color(&mut self, _spec: &ColorSpec) -> std::io::Result<()> {
+            Ok(())
+        }
+
+        fn reset(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
 
     #[tokio::test]
-    async fn test_prefetch() {}
+    #[ignore]
+    async fn test_prefetch() {
+        tracing_subscriber::fmt::init();
+        let client = client_from("tests/responses", "single_event.xml");
+        let mut seen_events = HashSet::new();
+        let mut tail = Tail::new(
+            &client,
+            StubWriter {},
+            "",
+            Utc.timestamp(0, 0),
+            &mut seen_events,
+        );
+
+        tail.prefetch().await.unwrap();
+    }
 
     #[tokio::test]
     async fn test_poll() {}
+
+    fn client_from(dirname: &str, filename: &str) -> CloudFormationClient {
+        let response = MockResponseReader::read_response(dirname, filename);
+        let client = CloudFormationClient::new_with(
+            MockRequestDispatcher::default().with_body(&response),
+            MockCredentialsProvider,
+            Default::default(),
+        );
+        client
+    }
+
+    fn default_tail(dirname: &str, filename: &str, seen_events: &mut HashSet<String>) {}
 }

@@ -1,0 +1,19 @@
+<DescribeStackEventsResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/">
+  <DescribeStackEventsResult>
+    <StackEvents>
+      <member>
+        <Timestamp>2016-03-15T20:54:31.809Z</Timestamp>
+        <ResourceStatus>CREATE_COMPLETE</ResourceStatus>
+        <StackId>arn:aws:cloudformation:us-east-1:123456789012:stack/SampleStack/12a3b456-0e10-4ce0-9052-5d484a8c4e5b</StackId>
+        <EventId>1dedea10-eaf0-11e5-8451-500c5242948e</EventId>
+        <LogicalResourceId>SampleStack</LogicalResourceId>
+        <StackName>SampleStack</StackName>
+        <PhysicalResourceIdI>arn:aws:cloudformation:us-east-1:123456789012:stack/SampleStack/12a3b456-0e10-4ce0-9052-5d484a8c4e5b</PhysicalResourceId>
+        <ResourceType>AWS::CloudFormation::Stack</ResourceType>
+      </member>
+    </StackEvents>
+  </DescribeStackEventsResult>
+  <ResponseMetadata>
+    <RequestId>b9b4b068-3a41-11e5-94eb-example</RequestId>
+  </ResponseMetadata>
+</DescribeStackEventsResponse>
