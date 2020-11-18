@@ -56,7 +56,7 @@ where
     // Fetch all of the events since the beginning of time, so that we can ensure all
     // of the events are sorted.
     #[tracing::instrument(skip(self))]
-    pub(crate) async fn prefetch(&mut self) -> Result<(), Error> {
+    pub(crate) async fn prefetch(&mut self) -> Result<()> {
         let mut all_events = Vec::new();
         let mut next_token: Option<String> = None;
         loop {
@@ -96,15 +96,15 @@ where
                     match e {
                         RusotoError::Service(ref error) => {
                             tracing::error!(err = %error, "rusoto error");
-                            return Err(Error::Rusoto(e));
+                            return Err(Error::Rusoto(e)).wrap_err("rusoto error");
                         }
                         RusotoError::Credentials(ref creds) => {
                             tracing::error!(creds = ?creds, "credentials err");
-                            return Err(Error::NoCredentials);
+                            return Err(Error::NoCredentials).wrap_err("credentials error");
                         }
                         _ => {
                             tracing::error!(err = ?e, "other sort of error");
-                            return Err(Error::Other(format!("{:?}", e)));
+                            return Err(Error::Other(format!("{:?}", e))).wrap_err("other error");
                         }
                     }
                 }

@@ -72,26 +72,32 @@ async fn main() {
 
         match tail.prefetch().await {
             Ok(_) => {}
-            Err(Error::NoCredentials) => {
-                eprintln!("No valid credentials found");
-                std::process::exit(1);
-            }
-            Err(Error::NoStack) => {
-                eprintln!("could not find stack {}", opts.stack_name);
-                std::process::exit(1);
-            }
-            Err(Error::CredentialsExpired) => {
-                eprintln!("Your credentials have expired");
-                std::process::exit(1);
-            }
-            Err(Error::RateLimitExceeded) => {
-                tracing::warn!("rate limit exceeded");
-                delay_for(Duration::from_secs(5)).await;
-            }
-            Err(e) => {
-                eprintln!("unknown error: {:?}", e);
-                std::process::exit(1);
-            }
+            Err(e) => match e.downcast_ref::<Error>() {
+                Some(Error::NoCredentials) => {
+                    eprintln!("No valid credentials found");
+                    std::process::exit(1);
+                }
+                Some(Error::NoStack) => {
+                    eprintln!("could not find stack {}", opts.stack_name);
+                    std::process::exit(1);
+                }
+                Some(Error::CredentialsExpired) => {
+                    eprintln!("Your credentials have expired");
+                    std::process::exit(1);
+                }
+                Some(Error::RateLimitExceeded) => {
+                    tracing::warn!("rate limit exceeded");
+                    delay_for(Duration::from_secs(5)).await;
+                }
+                Some(e) => {
+                    eprintln!("unknown error: {:?}", e);
+                    std::process::exit(1);
+                }
+                None => {
+                    eprintln!("unknown error: {:?}", e);
+                    std::process::exit(1);
+                }
+            },
         }
 
         tracing::debug!("starting poll loop");
