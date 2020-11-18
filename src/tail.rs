@@ -1,4 +1,3 @@
-use crate::error::Error;
 use crate::exponential_backoff::backoff;
 use chrono::{DateTime, Utc};
 use rusoto_cloudformation::{
@@ -13,6 +12,8 @@ use std::time::Duration;
 use termcolor::{Color, ColorSpec, WriteColor};
 use tokio::time::delay_for;
 use tracing::Instrument;
+
+use crate::error::{AwsError, Error};
 
 fn event_sort_key(a: &StackEvent, b: &StackEvent) -> std::cmp::Ordering {
     let a_timestamp = DateTime::parse_from_rfc3339(&a.timestamp).unwrap();
@@ -130,44 +131,62 @@ where
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub(crate) async fn poll(&mut self) -> Result<(), Error> {
         tracing::debug!(start_time = ?self.since, "showing logs from now");
 
         loop {
-            // let res = backoff(5, || {
-            let input = DescribeStackEventsInput {
-                stack_name: Some(self.stack_name.to_string()),
-                ..Default::default()
-            };
-
-            let res = self
-                .fetcher
-                .describe_stack_events(input)
-                .await
-                .map_err(Error::Rusoto)?;
-
-            let mut events = res.stack_events.unwrap_or_else(|| Vec::new());
-            events.sort_by(event_sort_key);
-            for event in events.into_iter() {
-                let timestamp =
-                    DateTime::<Utc>::from_str(&event.timestamp).expect("parsing event time");
-                // Filter on timestamp
-                if timestamp < self.since {
-                    continue;
+            if let Err(e) = self.poll_step().await {
+                match e {
+                    Error::Aws(AwsError::RateLimitExceeded) => {
+                        tracing::warn!("rate limit exceeded");
+                        delay_for(Duration::from_secs(10)).await;
+                    }
+                    // Surface the expired credentials up to the main outer loop so that a new
+                    // client can be constructed.
+                    Error::Aws(AwsError::CredentialExpired) => return Err(e),
+                    _ => tracing::error!(err = %e, "unhandled error"),
                 }
-
-                if self.seen_events.contains(&event.event_id) {
-                    continue;
-                }
-
-                self.print_event(&event).expect("printing");
-
-                self.seen_events.insert(event.event_id);
             }
 
             tracing::trace!("sleeping");
             delay_for(Duration::from_secs(5)).await;
         }
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn poll_step(&mut self) -> Result<(), Error> {
+        let input = DescribeStackEventsInput {
+            stack_name: Some(self.stack_name.to_string()),
+            ..Default::default()
+        };
+
+        let res = self
+            .fetcher
+            .describe_stack_events(input)
+            .await
+            .map_err(Error::Rusoto)?;
+
+        let mut events = res.stack_events.unwrap_or_else(|| Vec::new());
+        events.sort_by(event_sort_key);
+        for event in events.into_iter() {
+            let timestamp =
+                DateTime::<Utc>::from_str(&event.timestamp).expect("parsing event time");
+            // Filter on timestamp
+            if timestamp < self.since {
+                continue;
+            }
+
+            if self.seen_events.contains(&event.event_id) {
+                continue;
+            }
+
+            self.print_event(&event).expect("printing");
+
+            self.seen_events.insert(event.event_id);
+        }
+
+        Ok(())
     }
 
     #[tracing::instrument(skip(self, event))]
