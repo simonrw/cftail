@@ -172,12 +172,3 @@ where
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Cursor;
-
-    #[test]
-    fn test_print_event() {}
-}
