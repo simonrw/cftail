@@ -1,8 +1,7 @@
 use crate::error::Error;
 use crate::exponential_backoff::backoff;
-use crate::fetch::Fetch;
 use chrono::{DateTime, Utc};
-use rusoto_cloudformation::StackEvent;
+use rusoto_cloudformation::{CloudFormationClient, StackEvent};
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -18,9 +17,8 @@ fn event_sort_key(a: &StackEvent, b: &StackEvent) -> std::cmp::Ordering {
     a_timestamp.partial_cmp(&b_timestamp).unwrap()
 }
 
-#[derive(Debug)]
-pub(crate) struct Tail<'a, F, W> {
-    fetcher: F,
+pub(crate) struct Tail<'a, W> {
+    fetcher: &'a CloudFormationClient,
     writer: W,
     stack_name: &'a str,
     since: DateTime<Utc>,
@@ -28,12 +26,16 @@ pub(crate) struct Tail<'a, F, W> {
     latest_event: Option<DateTime<Utc>>,
 }
 
-impl<'a, F, W> Tail<'a, F, W>
+impl<'a, W> Tail<'a, W>
 where
-    F: Fetch + Debug,
     W: WriteColor + Debug,
 {
-    pub(crate) fn new(fetcher: F, writer: W, stack_name: &'a str, since: DateTime<Utc>) -> Self {
+    pub(crate) fn new(
+        fetcher: &'a CloudFormationClient,
+        writer: W,
+        stack_name: &'a str,
+        since: DateTime<Utc>,
+    ) -> Self {
         Self {
             fetcher,
             writer,
@@ -48,6 +50,8 @@ where
     // of the events are sorted.
     #[tracing::instrument(skip(self))]
     pub(crate) async fn prefetch(&mut self) -> Result<(), Error> {
+        todo!();
+        /*
         let mut all_events = self.fetcher.fetch_all_events(self.stack_name).await?;
         all_events.sort_by(event_sort_key);
 
@@ -71,63 +75,66 @@ where
             self.seen_events.insert(e.event_id.clone());
         });
         Ok(())
+        */
     }
 
     pub(crate) async fn poll(&mut self) -> Result<(), Error> {
         tracing::debug!(start_time = ?self.since, "showing logs from now");
 
-        async move {
-            loop {
-                let res = backoff(5, || {
-                    self.fetcher
-                        .fetch_events_since(self.stack_name, &self.since)
-                })
-                .instrument(tracing::trace_span!("backoff"))
-                .await;
+        todo!();
 
-                let res = res.map(|events| {
-                    let mut events = events.clone();
-                    tracing::debug!(nevents = events.len(), "found new events");
-                    events.sort_by(event_sort_key);
-                    for event in events.into_iter() {
-                        let timestamp = DateTime::parse_from_rfc3339(&event.timestamp)
-                            .expect("parsing event time");
-                        // Filter on timestamp
-                        if timestamp < self.since {
-                            continue;
-                        }
+        // async move {
+        //     loop {
+        //         let res = backoff(5, || {
+        //             self.fetcher
+        //                 .fetch_events_since(self.stack_name, &self.since)
+        //         })
+        //         .instrument(tracing::trace_span!("backoff"))
+        //         .await;
 
-                        if self.seen_events.contains(&event.event_id) {
-                            continue;
-                        }
+        //         let res = res.map(|events| {
+        //             let mut events = events.clone();
+        //             tracing::debug!(nevents = events.len(), "found new events");
+        //             events.sort_by(event_sort_key);
+        //             for event in events.into_iter() {
+        //                 let timestamp = DateTime::parse_from_rfc3339(&event.timestamp)
+        //                     .expect("parsing event time");
+        //                 // Filter on timestamp
+        //                 if timestamp < self.since {
+        //                     continue;
+        //                 }
 
-                        self.print_event(&event).expect("printing");
+        //                 if self.seen_events.contains(&event.event_id) {
+        //                     continue;
+        //                 }
 
-                        self.seen_events.insert(event.event_id);
-                    }
-                });
+        //                 self.print_event(&event).expect("printing");
 
-                if let Err(e) = res {
-                    match e {
-                        Error::Rusoto(rusoto_core::RusotoError::Unknown(response)) => {
-                            // TODO: Handle credential refreshing
-                            tracing::warn!(
-                                status_code = response.status.as_u16(),
-                                message = response.body_as_str(),
-                                "HTTP error"
-                            );
-                            return Err(Error::Http(response));
-                        }
-                        _ => tracing::warn!(err = ?e, "unexpected error"),
-                    }
-                }
+        //                 self.seen_events.insert(event.event_id);
+        //             }
+        //         });
 
-                tracing::trace!("sleeping");
-                delay_for(Duration::from_secs(5)).await;
-            }
-        }
-        .instrument(tracing::debug_span!("poll-loop"))
-        .await
+        //         if let Err(e) = res {
+        //             match e {
+        //                 Error::Rusoto(rusoto_core::RusotoError::Unknown(response)) => {
+        //                     // TODO: Handle credential refreshing
+        //                     tracing::warn!(
+        //                         status_code = response.status.as_u16(),
+        //                         message = response.body_as_str(),
+        //                         "HTTP error"
+        //                     );
+        //                     return Err(Error::Http(response));
+        //                 }
+        //                 _ => tracing::warn!(err = ?e, "unexpected error"),
+        //             }
+        //         }
+
+        //         tracing::trace!("sleeping");
+        //         delay_for(Duration::from_secs(5)).await;
+        //     }
+        // }
+        // .instrument(tracing::debug_span!("poll-loop"))
+        // .await
     }
 
     #[tracing::instrument(skip(self, event))]
@@ -171,4 +178,16 @@ where
 
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher, MockResponseReader};
+
+    #[tokio::test]
+    async fn test_prefetch() {}
+
+    #[tokio::test]
+    async fn test_poll() {}
 }

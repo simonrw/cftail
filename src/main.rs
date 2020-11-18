@@ -7,10 +7,8 @@ use structopt::StructOpt;
 use termcolor::{ColorChoice, StandardStream};
 use tokio::time::delay_for;
 
-mod cfclient;
 mod error;
 mod exponential_backoff;
-mod fetch;
 mod stack_status;
 mod tail;
 mod writer;
@@ -65,12 +63,7 @@ async fn main() {
         let stdout = StandardStream::stdout(ColorChoice::Auto);
         let handle = Writer::new(stdout.lock());
 
-        let mut tail = Tail::new(
-            cfclient::CFClient::new(client),
-            handle,
-            &opts.stack_name,
-            since,
-        );
+        let mut tail = Tail::new(&client, handle, &opts.stack_name, since);
 
         match tail.prefetch().await {
             Ok(_) => {}
