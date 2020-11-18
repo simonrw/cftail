@@ -1,6 +1,7 @@
 use chrono::prelude::*;
 use rusoto_cloudformation::CloudFormationClient;
 use rusoto_core::Region;
+use std::collections::HashSet;
 use std::str::FromStr;
 use std::time::Duration;
 use structopt::StructOpt;
@@ -54,6 +55,8 @@ async fn main() {
 
     tracing::info!(stack_name = %opts.stack_name, since = %since, "tailing stack events");
 
+    let mut seen_events = HashSet::new();
+
     loop {
         let region = Region::default();
         tracing::debug!(region = ?region, "chosen region");
@@ -63,7 +66,7 @@ async fn main() {
         let stdout = StandardStream::stdout(ColorChoice::Auto);
         let handle = Writer::new(stdout.lock());
 
-        let mut tail = Tail::new(&client, handle, &opts.stack_name, since);
+        let mut tail = Tail::new(&client, handle, &opts.stack_name, since, &mut seen_events);
 
         match tail.prefetch().await {
             Ok(_) => {}

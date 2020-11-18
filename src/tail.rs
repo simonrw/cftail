@@ -27,7 +27,7 @@ pub(crate) struct Tail<'a, W> {
     writer: W,
     stack_name: &'a str,
     since: DateTime<Utc>,
-    seen_events: HashSet<String>,
+    seen_events: &'a mut HashSet<String>,
     latest_event: Option<DateTime<Utc>>,
 }
 
@@ -40,14 +40,15 @@ where
         writer: W,
         stack_name: &'a str,
         since: DateTime<Utc>,
+        seen_events: &'a mut HashSet<String>,
     ) -> Self {
         Self {
             fetcher,
             writer,
             stack_name,
             since,
-            seen_events: HashSet::new(),
             latest_event: None,
+            seen_events,
         }
     }
 
