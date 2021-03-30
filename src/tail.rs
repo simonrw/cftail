@@ -322,17 +322,4 @@ mod tests {
 
         assert_eq!(seen_events.len(), 1);
     }
-
-    #[tokio::test]
-    async fn test_poll() {}
-
-    fn client_from(dirname: &str, filename: &str) -> CloudFormationClient {
-        let response = dbg!(MockResponseReader::read_response(dirname, filename));
-        let dispatcher = MockRequestDispatcher::with_status(200).with_body(&response);
-        let client =
-            CloudFormationClient::new_with(dispatcher, MockCredentialsProvider, Default::default());
-        client
-    }
-
-    fn default_tail(dirname: &str, filename: &str, seen_events: &mut HashSet<String>) {}
 }
