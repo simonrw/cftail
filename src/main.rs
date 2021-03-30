@@ -1,4 +1,4 @@
-use chrono::prelude::*;
+use chrono::{prelude::*, Duration as ChronoDuration};
 use eyre::{Result, WrapErr};
 use rusoto_cloudformation::CloudFormationClient;
 use rusoto_core::Region;
@@ -32,6 +32,17 @@ fn parse_since_argument(src: &str) -> Result<DateTime<Utc>> {
 
     // Try to parse as timestamp
     if let Ok(dt) = src.parse::<i64>().map(|i| Utc.timestamp(i, 0)) {
+        return Ok(dt);
+    }
+
+    // some common terms
+    if src == "today" {
+        let today = Utc::today();
+        let dt = today.and_hms(0, 0, 0);
+        return Ok(dt);
+    } else if src == "yesterday" {
+        let yesterday = Utc::today() - ChronoDuration::days(1);
+        let dt = yesterday.and_hms(0, 0, 0);
         return Ok(dt);
     }
 
