@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use eyre::{Result, WrapErr};
+use futures::future::join_all;
 use rusoto_cloudformation::{
     CloudFormation, CloudFormationClient, DescribeStackEventsInput, StackEvent,
 };
@@ -8,8 +9,10 @@ use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 use termcolor::{Color, ColorSpec, WriteColor};
+use tokio::sync::mpsc;
 use tokio::time::delay_for;
 use tracing::Instrument;
 
@@ -22,13 +25,19 @@ fn event_sort_key(a: &StackEvent, b: &StackEvent) -> std::cmp::Ordering {
     a_timestamp.partial_cmp(&b_timestamp).unwrap()
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TailConfig<'a> {
+    pub(crate) original_stack_name: &'a str,
+    pub(crate) since: DateTime<Utc>,
+    pub(crate) stacks: &'a HashSet<String>,
+    pub(crate) nested: bool,
+}
+
 pub(crate) struct Tail<'a, W> {
-    fetcher: &'a CloudFormationClient,
-    writer: W,
-    stack_name: &'a str,
-    since: DateTime<Utc>,
+    fetcher: Arc<CloudFormationClient>,
+    writer: &'a mut W,
     seen_events: &'a mut HashSet<String>,
-    latest_event: Option<DateTime<Utc>>,
+    config: TailConfig<'a>,
 }
 
 impl<'a, W> Tail<'a, W>
@@ -36,114 +45,37 @@ where
     W: WriteColor + Debug,
 {
     pub(crate) fn new(
-        fetcher: &'a CloudFormationClient,
-        writer: W,
-        stack_name: &'a str,
-        since: DateTime<Utc>,
+        config: TailConfig<'a>,
+        fetcher: Arc<CloudFormationClient>,
+        writer: &'a mut W,
         seen_events: &'a mut HashSet<String>,
     ) -> Self {
         Self {
+            config,
             fetcher,
             writer,
-            stack_name,
-            since,
-            latest_event: None,
             seen_events,
         }
     }
 
     // Fetch all of the events since the beginning of time, so that we can ensure all
     // of the events are sorted.
-    #[tracing::instrument(skip(self))]
+    // #[tracing::instrument(skip(self))]
     pub(crate) async fn prefetch(&mut self) -> Result<()> {
-        let mut all_events = Vec::new();
-        let mut next_token: Option<String> = None;
-        loop {
-            tracing::debug!(next_token = ?next_token, "fetching more events");
-            let input = DescribeStackEventsInput {
-                stack_name: Some(self.stack_name.to_string()),
-                next_token: next_token.clone(),
-            };
-
-            tracing::debug!(input = ?input, "sending request with payload");
-            let res = self
-                .fetcher
-                .describe_stack_events(input.clone())
-                .instrument(tracing::debug_span!("fetching events"))
-                .await;
-
-            match res {
-                Ok(response) => {
-                    tracing::debug!("got successful response");
-                    match response.stack_events {
-                        Some(batch) => {
-                            all_events.extend_from_slice(&batch);
-                        }
-                        None => {
-                            tracing::debug!("reached end of events");
-                            break;
-                        }
-                    }
-
-                    match response.next_token {
-                        Some(new_next_token) => next_token = Some(new_next_token),
-                        None => break,
-                    }
-                }
-                Err(e) => {
-                    tracing::debug!("got failed response");
-                    match e {
-                        RusotoError::Service(ref error) => {
-                            tracing::error!(err = %error, "rusoto error");
-                            return Err(Error::Rusoto(e)).wrap_err("rusoto error");
-                        }
-                        RusotoError::Credentials(ref creds) => {
-                            tracing::error!(creds = ?creds, "credentials err");
-                            return Err(Error::NoCredentials).wrap_err("credentials error");
-                        }
-                        RusotoError::Unknown(response) => {
-                            let body_str = std::str::from_utf8(&response.body)
-                                .wrap_err("error decoding response body as utf8 string")?;
-                            let error = crate::error::ErrorResponse::from_str(body_str)
-                                .wrap_err("parsing error response")?;
-
-                            let underlying = match error.error.code.as_str() {
-                                "Throttling" => Error::RateLimitExceeded,
-                                "ExpiredToken" => Error::CredentialsExpired,
-                                "ValidationError" => Error::NoStack,
-                                _ => Error::ErrorResponse(error),
-                            };
-                            return Err(underlying).wrap_err("rusoto error");
-                        }
-                        _ => {
-                            tracing::error!(err = ?e, "other sort of error");
-                            return Err(Error::Other(format!("{:?}", e))).wrap_err("other error");
-                        }
-                    }
-                }
-            }
-        }
-
+        tracing::debug!("prefetching events");
+        // fetch all of the stack events for the nested stacks
+        let all_events = self.fetch_events(self.config.stacks.iter()).await?;
         tracing::debug!(nevents = all_events.len(), "got all past events");
-
-        all_events.sort_by(event_sort_key);
 
         if all_events.is_empty() {
             tracing::debug!("no events found");
             return Ok(());
         }
 
-        let last_event = &all_events[all_events.len() - 1];
-        self.latest_event = Some(
-            DateTime::parse_from_rfc3339(&last_event.timestamp)
-                .unwrap()
-                .with_timezone(&Utc),
-        );
-
         for e in &all_events {
             let timestamp =
                 DateTime::parse_from_rfc3339(e.timestamp.as_str()).expect("parsing timestamp");
-            if timestamp > self.since {
+            if timestamp > self.config.since {
                 self.print_event(&e).expect("printing");
             }
             self.seen_events.insert(e.event_id.clone());
@@ -153,7 +85,7 @@ where
 
     #[tracing::instrument(skip(self))]
     pub(crate) async fn poll(&mut self) -> Result<()> {
-        tracing::debug!(start_time = ?self.since, "showing logs from now");
+        tracing::debug!(start_time = ?self.config.since, "showing logs from now");
 
         loop {
             if let Err(e) = self.poll_step().await {
@@ -180,34 +112,20 @@ where
 
     #[tracing::instrument(skip(self))]
     async fn poll_step(&mut self) -> Result<()> {
-        let input = DescribeStackEventsInput {
-            stack_name: Some(self.stack_name.to_string()),
-            ..Default::default()
-        };
+        tracing::info!(n_seen_events = ?self.seen_events.len(), "running poll step");
+        let all_events = self.fetch_events(self.config.stacks.iter()).await?;
+        if all_events.is_empty() {
+            tracing::debug!("no events found");
+            return Ok(());
+        }
 
-        let res = self
-            .fetcher
-            .describe_stack_events(input)
-            .await
-            .map_err(Error::Rusoto)?;
-
-        let mut events = res.stack_events.unwrap_or_else(|| Vec::new());
-        events.sort_by(event_sort_key);
-        for event in events.into_iter() {
-            let timestamp =
-                DateTime::<Utc>::from_str(&event.timestamp).wrap_err("parsing event time")?;
-            // Filter on timestamp
-            if timestamp < self.since {
-                continue;
-            }
-
+        for event in &all_events {
             if self.seen_events.contains(&event.event_id) {
                 continue;
             }
 
-            self.print_event(&event).wrap_err("printing")?;
-
-            self.seen_events.insert(event.event_id);
+            self.print_event(&event).expect("printing");
+            self.seen_events.insert(event.event_id.clone());
         }
 
         Ok(())
@@ -223,21 +141,42 @@ where
             .resource_status
             .as_ref()
             .expect("could not find resource_status in response");
+        let stack_name = event.stack_name.as_str();
         let timestamp = &event.timestamp;
         let status_reason = event.resource_status_reason.as_ref();
 
         write!(self.writer, "{timestamp}: ", timestamp = timestamp)
             .wrap_err("printing timestamp")?;
-        if resource_name == self.stack_name {
+        if resource_name == self.config.original_stack_name {
             let mut spec = ColorSpec::new();
             spec.set_fg(Some(Color::Yellow));
-            self.writer.set_color(&spec).unwrap();
-            write!(self.writer, "{name}", name = resource_name)
+            self.writer.set_color(&spec).wrap_err("setting color")?;
+            if self.config.nested {
+                write!(
+                    self.writer,
+                    "{stack_name} - {name}",
+                    stack_name = stack_name,
+                    name = resource_name
+                )
                 .wrap_err("printing resource name")?;
+            } else {
+                write!(self.writer, "{name}", name = resource_name)
+                    .wrap_err("printing resource name")?;
+            }
             self.writer.reset().wrap_err("resetting colour")?;
         } else {
-            write!(self.writer, "{name}", name = resource_name)
+            if self.config.nested {
+                write!(
+                    self.writer,
+                    "{stack_name} - {name}",
+                    stack_name = stack_name,
+                    name = resource_name
+                )
                 .wrap_err("printing resource name")?;
+            } else {
+                write!(self.writer, "{name}", name = resource_name)
+                    .wrap_err("printing resource name")?;
+            }
         }
 
         write!(self.writer, " | ").wrap_err("printing pipe character")?;
@@ -255,7 +194,7 @@ where
             writeln!(self.writer, " ({reason})", reason = reason)
                 .wrap_err("printing failure reason")?;
         } else {
-            if stack_status.is_complete() && resource_name == self.stack_name {
+            if stack_status.is_complete() && resource_name == self.config.original_stack_name {
                 writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
             } else {
                 writeln!(self.writer, "").wrap_err("printing end of event")?;
@@ -263,6 +202,115 @@ where
         }
 
         Ok(())
+    }
+
+    async fn fetch_events(
+        &mut self,
+        stacks: impl Iterator<Item = &String>,
+    ) -> Result<Vec<StackEvent>> {
+        let (tx, mut rx) = mpsc::channel(self.config.stacks.len());
+        let handles: Vec<_> = stacks
+            .map(|stack_name| {
+                tracing::debug!(name = ?stack_name, "fetching events for stack");
+                let mut tx = tx.clone();
+                let fetcher = Arc::clone(&self.fetcher);
+                let stack_name = stack_name.clone();
+                tracing::debug!("spawning task");
+                tokio::spawn(async move {
+                    tracing::debug!("spawned task");
+                    let mut next_token: Option<String> = None;
+                    let mut all_events = Vec::new();
+
+                    loop {
+                        let input = DescribeStackEventsInput {
+                            stack_name: Some(stack_name.clone()),
+                            next_token: next_token.clone(),
+                        };
+
+                        tracing::debug!(input = ?input, "sending request with payload");
+                        let res = fetcher
+                            .describe_stack_events(input)
+                            .instrument(tracing::debug_span!("fetching events"))
+                            .await;
+
+                        match res {
+                            Ok(response) => {
+                                tracing::debug!("got successful response");
+                                match response.stack_events {
+                                    Some(batch) => {
+                                        all_events.extend_from_slice(&batch);
+                                    }
+                                    None => {
+                                        tracing::debug!("reached end of events");
+                                        break;
+                                    }
+                                }
+
+                                match response.next_token {
+                                    Some(new_next_token) => next_token = Some(new_next_token),
+                                    None => break,
+                                }
+                            }
+                            Err(e) => {
+                                tracing::debug!("got failed response");
+                                match e {
+                                    RusotoError::Service(ref error) => {
+                                        tracing::error!(err = %error, "rusoto error");
+                                        return Err(Error::Rusoto(e)).wrap_err("rusoto error");
+                                    }
+                                    RusotoError::Credentials(ref creds) => {
+                                        tracing::error!(creds = ?creds, "credentials err");
+                                        return Err(Error::NoCredentials)
+                                            .wrap_err("credentials error");
+                                    }
+                                    RusotoError::Unknown(response) => {
+                                        let body_str = std::str::from_utf8(&response.body)
+                                            .wrap_err(
+                                                "error decoding response body as utf8 string",
+                                            )?;
+                                        let error = crate::error::ErrorResponse::from_str(body_str)
+                                            .wrap_err("parsing error response")?;
+
+                                        let underlying = match error.error.code.as_str() {
+                                            "Throttling" => Error::RateLimitExceeded,
+                                            "ExpiredToken" => Error::CredentialsExpired,
+                                            "ValidationError" => Error::NoStack,
+                                            _ => Error::ErrorResponse(error),
+                                        };
+                                        return Err(underlying).wrap_err("rusoto error");
+                                    }
+                                    _ => {
+                                        tracing::error!(err = ?e, "other sort of error");
+                                        return Err(Error::Other(format!("{:?}", e)))
+                                            .wrap_err("other error");
+                                    }
+                                }
+                            }
+                        };
+                    }
+
+                    tx.send(all_events)
+                        .await
+                        .wrap_err("error sending events over channel")?;
+
+                    Ok::<(), eyre::Error>(())
+                })
+            })
+            .collect();
+
+        join_all(handles).await;
+
+        drop(tx);
+
+        let mut all_events = Vec::new();
+        tracing::debug!("waiting for events");
+        while let Some(res) = rx.recv().await {
+            all_events.extend(res);
+        }
+
+        all_events.sort_by(event_sort_key);
+
+        Ok(all_events)
     }
 }
 
@@ -310,13 +358,20 @@ mod tests {
         let client =
             CloudFormationClient::new_with(dispatcher, MockCredentialsProvider, Default::default());
         let mut seen_events = HashSet::new();
-        let mut tail = Tail::new(
-            &client,
-            StubWriter {},
-            "SampleStack",
-            Utc.timestamp(0, 0),
-            &mut seen_events,
-        );
+        let stacks = {
+            let mut stacks = HashSet::new();
+            stacks.insert(String::from("SampleStack"));
+            stacks
+        };
+        let config = TailConfig {
+            original_stack_name: "SampleStack",
+            since: Utc.timestamp(0, 0),
+            stacks: &stacks,
+            nested: false,
+        };
+        let mut writer = StubWriter {};
+
+        let mut tail = Tail::new(config, Arc::new(client), &mut writer, &mut seen_events);
 
         tail.prefetch().await.unwrap();
 

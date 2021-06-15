@@ -1,11 +1,13 @@
 use std::fmt::Debug;
-use termcolor::{ColorSpec, StandardStreamLock, WriteColor};
+use termcolor::{ColorSpec, StandardStream, WriteColor};
 
-pub(crate) struct Writer<'a>(StandardStreamLock<'a>);
+pub(crate) struct Writer<'a> {
+    stream: &'a mut StandardStream,
+}
 
 impl<'a> Writer<'a> {
-    pub(crate) fn new(inner: StandardStreamLock<'a>) -> Self {
-        Self(inner)
+    pub(crate) fn new(stream: &'a mut StandardStream) -> Self {
+        Self { stream }
     }
 }
 
@@ -17,24 +19,26 @@ impl<'a> Debug for Writer<'a> {
 
 impl<'a> std::io::Write for Writer<'a> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.write(buf)
+        let mut lock = self.stream.lock();
+        lock.write(buf)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.0.flush()
+        let mut lock = self.stream.lock();
+        lock.flush()
     }
 }
 
 impl<'a> WriteColor for Writer<'a> {
     fn supports_color(&self) -> bool {
-        self.0.supports_color()
+        true
     }
 
     fn set_color(&mut self, spec: &ColorSpec) -> std::io::Result<()> {
-        self.0.set_color(spec)
+        self.stream.set_color(spec)
     }
 
     fn reset(&mut self) -> std::io::Result<()> {
-        self.0.reset()
+        self.stream.reset()
     }
 }

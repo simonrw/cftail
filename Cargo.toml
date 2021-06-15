@@ -2,7 +2,7 @@
 authors = ["Simon Walker <s.r.walker101@googlemail.com>"]
 edition = "2018"
 name = "cftail"
-version = "0.2.0"
+version = "0.3.0"
 license = "Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -23,6 +23,7 @@ tracing-subscriber = "0.2.15"
 eyre = "0.6.3"
 color-eyre = "0.5.7"
 thiserror = "1.0.22"
+futures = "0.3.15"
 
 [dev-dependencies]
 rusoto_mock = "0.45.0"

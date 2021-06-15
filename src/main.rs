@@ -4,18 +4,20 @@ use rusoto_cloudformation::CloudFormationClient;
 use rusoto_core::Region;
 use std::collections::HashSet;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 use structopt::StructOpt;
 use termcolor::{ColorChoice, StandardStream};
 use tokio::time::delay_for;
 
 mod error;
+mod nested_stacks;
 mod stack_status;
 mod tail;
 mod writer;
 
 use crate::error::Error;
-use crate::tail::Tail;
+use crate::tail::{Tail, TailConfig};
 use crate::writer::Writer;
 
 // Custom parser for parsing the datetime as either a timestamp, or as a handy string.
@@ -50,11 +52,22 @@ fn parse_since_argument(src: &str) -> Result<DateTime<Utc>> {
 }
 
 #[derive(StructOpt)]
+#[structopt(author = "Simon Walker")]
+/// Tail CloudFormation deployments
+///
+/// Watch a log of deployment events for CloudFormation stacks from your console.
 struct Opts {
+    /// Name of the stack to tail
     stack_name: String,
 
+    /// When to start fetching data from. This could be a timestamp, text string, or the words
+    /// `today` or `yesterday`
     #[structopt(short, long, parse(try_from_str = parse_since_argument))]
     since: Option<DateTime<Utc>>,
+
+    /// Also fetch nested stacks and their deploy status
+    #[structopt(short, long)]
+    nested: bool,
 }
 
 #[tokio::main]
@@ -68,18 +81,36 @@ async fn main() {
     tracing::info!(stack_name = %opts.stack_name, since = %since, "tailing stack events");
 
     let mut seen_events = HashSet::new();
+    let original_stack_name = opts.stack_name.clone();
+
+    let mut stdout = StandardStream::stdout(ColorChoice::Auto);
+    let mut writer = Writer::new(&mut stdout);
 
     loop {
         let region = Region::default();
         tracing::debug!(region = ?region, "chosen region");
 
         let client = CloudFormationClient::new(region);
+        let stacks = if opts.nested {
+            nested_stacks::fetch_nested_stack_names(&client, &opts.stack_name)
+                .await
+                .expect("fetching nested stacks")
+        } else {
+            let mut stacks = HashSet::new();
+            stacks.insert(opts.stack_name.clone());
+            stacks
+        };
 
-        let stdout = StandardStream::stdout(ColorChoice::Auto);
-        let handle = Writer::new(stdout.lock());
+        let config = TailConfig {
+            original_stack_name: &original_stack_name,
+            since,
+            stacks: &stacks,
+            nested: opts.nested,
+        };
 
-        let mut tail = Tail::new(&client, handle, &opts.stack_name, since, &mut seen_events);
+        let mut tail = Tail::new(config, Arc::new(client), &mut writer, &mut seen_events);
 
+        tracing::info!("prefetching tasks");
         match tail.prefetch().await {
             Ok(_) => {}
             Err(e) => match e.downcast_ref::<Error>() {
@@ -88,7 +119,7 @@ async fn main() {
                     std::process::exit(1);
                 }
                 Some(Error::NoStack) => {
-                    eprintln!("Error: could not find stack {}", opts.stack_name);
+                    eprintln!("Error: could not find stack {}", &opts.stack_name);
                     std::process::exit(1);
                 }
                 Some(Error::CredentialsExpired) => {
