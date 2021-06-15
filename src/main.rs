@@ -76,8 +76,7 @@ async fn main() {
 
         let client = CloudFormationClient::new(region);
 
-        let stdout = StandardStream::stdout(ColorChoice::Auto);
-        let handle = Writer::new(stdout.lock());
+        let handle = Writer::new();
 
         let mut tail = Tail::new(&client, handle, &opts.stack_name, since, &mut seen_events);
 
