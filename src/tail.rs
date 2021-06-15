@@ -59,113 +59,8 @@ where
     pub(crate) async fn prefetch(&mut self) -> Result<()> {
         tracing::debug!("prefetching events");
         // fetch all of the stack events for the nested stacks
-        let (tx, mut rx) = mpsc::channel(self.stacks.len());
-
-        let handles: Vec<_> = self
-            .stacks
-            .iter()
-            .map(|stack_name| {
-                tracing::debug!(name = ?stack_name, "fetching events for stack");
-                let mut tx = tx.clone();
-                let fetcher = Arc::clone(&self.fetcher);
-                let stack_name = stack_name.clone();
-                tracing::debug!("spawning task");
-                tokio::spawn(async move {
-                    tracing::debug!("spawned task");
-                    let mut next_token: Option<String> = None;
-                    let mut all_events = Vec::new();
-
-                    loop {
-                        let input = DescribeStackEventsInput {
-                            stack_name: Some(stack_name.clone()),
-                            next_token: next_token.clone(),
-                        };
-
-                        tracing::debug!(input = ?input, "sending request with payload");
-                        let res = fetcher
-                            .describe_stack_events(input)
-                            .instrument(tracing::debug_span!("fetching events"))
-                            .await;
-
-                        match res {
-                            Ok(response) => {
-                                tracing::debug!("got successful response");
-                                match response.stack_events {
-                                    Some(batch) => {
-                                        all_events.extend_from_slice(&batch);
-                                    }
-                                    None => {
-                                        tracing::debug!("reached end of events");
-                                        break;
-                                    }
-                                }
-
-                                match response.next_token {
-                                    Some(new_next_token) => next_token = Some(new_next_token),
-                                    None => break,
-                                }
-                            }
-                            Err(e) => {
-                                todo!("{:?}", e);
-                                /*
-                                Err(e) => {
-                                    tracing::debug!("got failed response");
-                                    match e {
-                                        RusotoError::Service(ref error) => {
-                                            tracing::error!(err = %error, "rusoto error");
-                                            return Err(Error::Rusoto(e)).wrap_err("rusoto error");
-                                        }
-                                        RusotoError::Credentials(ref creds) => {
-                                            tracing::error!(creds = ?creds, "credentials err");
-                                            return Err(Error::NoCredentials).wrap_err("credentials error");
-                                        }
-                                        RusotoError::Unknown(response) => {
-                                            let body_str = std::str::from_utf8(&response.body)
-                                                .wrap_err("error decoding response body as utf8 string")?;
-                                            let error = crate::error::ErrorResponse::from_str(body_str)
-                                                .wrap_err("parsing error response")?;
-
-                                            let underlying = match error.error.code.as_str() {
-                                                "Throttling" => Error::RateLimitExceeded,
-                                                "ExpiredToken" => Error::CredentialsExpired,
-                                                "ValidationError" => Error::NoStack,
-                                                _ => Error::ErrorResponse(error),
-                                            };
-                                            return Err(underlying).wrap_err("rusoto error");
-                                        }
-                                        _ => {
-                                            tracing::error!(err = ?e, "other sort of error");
-                                            return Err(Error::Other(format!("{:?}", e))).wrap_err("other error");
-                                        }
-                                    }
-                                }
-                                */
-                            }
-                        };
-                    }
-
-                    tx.send(all_events)
-                        .await
-                        .wrap_err("error sending events over channel")?;
-
-                    Ok::<(), eyre::Error>(())
-                })
-            })
-            .collect();
-
-        join_all(handles).await;
-
-        drop(tx);
-
-        let mut all_events = Vec::new();
-        tracing::debug!("waiting for events");
-        while let Some(res) = rx.recv().await {
-            all_events.extend(res);
-        }
-
+        let all_events = self.fetch_events(self.stacks.iter()).await?;
         tracing::debug!(nevents = all_events.len(), "got all past events");
-
-        all_events.sort_by(event_sort_key);
 
         if all_events.is_empty() {
             tracing::debug!("no events found");
@@ -213,112 +108,7 @@ where
     #[tracing::instrument(skip(self))]
     async fn poll_step(&mut self) -> Result<()> {
         tracing::info!(n_seen_events = ?self.seen_events.len(), "running poll step");
-        let (tx, mut rx) = mpsc::channel(self.stacks.len());
-        let handles: Vec<_> = self
-            .stacks
-            .iter()
-            .map(|stack_name| {
-                tracing::debug!(name = ?stack_name, "fetching events for stack");
-                let mut tx = tx.clone();
-                let fetcher = Arc::clone(&self.fetcher);
-                let stack_name = stack_name.clone();
-                tracing::debug!("spawning task");
-                tokio::spawn(async move {
-                    tracing::debug!("spawned task");
-                    let mut next_token: Option<String> = None;
-                    let mut all_events = Vec::new();
-
-                    loop {
-                        let input = DescribeStackEventsInput {
-                            stack_name: Some(stack_name.clone()),
-                            next_token: next_token.clone(),
-                        };
-
-                        tracing::debug!(input = ?input, "sending request with payload");
-                        let res = fetcher
-                            .describe_stack_events(input)
-                            .instrument(tracing::debug_span!("fetching events"))
-                            .await;
-
-                        match res {
-                            Ok(response) => {
-                                tracing::debug!("got successful response");
-                                match response.stack_events {
-                                    Some(batch) => {
-                                        all_events.extend_from_slice(&batch);
-                                    }
-                                    None => {
-                                        tracing::debug!("reached end of events");
-                                        break;
-                                    }
-                                }
-
-                                match response.next_token {
-                                    Some(new_next_token) => next_token = Some(new_next_token),
-                                    None => break,
-                                }
-                            }
-                            Err(e) => {
-                                todo!("{:?}", e);
-                                /*
-                                Err(e) => {
-                                    tracing::debug!("got failed response");
-                                    match e {
-                                        RusotoError::Service(ref error) => {
-                                            tracing::error!(err = %error, "rusoto error");
-                                            return Err(Error::Rusoto(e)).wrap_err("rusoto error");
-                                        }
-                                        RusotoError::Credentials(ref creds) => {
-                                            tracing::error!(creds = ?creds, "credentials err");
-                                            return Err(Error::NoCredentials).wrap_err("credentials error");
-                                        }
-                                        RusotoError::Unknown(response) => {
-                                            let body_str = std::str::from_utf8(&response.body)
-                                                .wrap_err("error decoding response body as utf8 string")?;
-                                            let error = crate::error::ErrorResponse::from_str(body_str)
-                                                .wrap_err("parsing error response")?;
-
-                                            let underlying = match error.error.code.as_str() {
-                                                "Throttling" => Error::RateLimitExceeded,
-                                                "ExpiredToken" => Error::CredentialsExpired,
-                                                "ValidationError" => Error::NoStack,
-                                                _ => Error::ErrorResponse(error),
-                                            };
-                                            return Err(underlying).wrap_err("rusoto error");
-                                        }
-                                        _ => {
-                                            tracing::error!(err = ?e, "other sort of error");
-                                            return Err(Error::Other(format!("{:?}", e))).wrap_err("other error");
-                                        }
-                                    }
-                                }
-                                */
-                            }
-                        };
-                    }
-
-                    tx.send(all_events)
-                        .await
-                        .wrap_err("error sending events over channel")?;
-
-                    Ok::<(), eyre::Error>(())
-                })
-            })
-            .collect();
-
-        join_all(handles).await;
-
-        drop(tx);
-
-        let mut all_events = Vec::new();
-        tracing::debug!("waiting for events");
-        while let Some(res) = rx.recv().await {
-            all_events.extend(res);
-        }
-
-        tracing::debug!(nevents = all_events.len(), "got all past events");
-
-        all_events.sort_by(event_sort_key);
+        let all_events = self.fetch_events(self.stacks.iter()).await?;
         if all_events.is_empty() {
             tracing::debug!("no events found");
             return Ok(());
@@ -391,6 +181,116 @@ where
         }
 
         Ok(())
+    }
+
+    async fn fetch_events(
+        &mut self,
+        stacks: impl Iterator<Item = &String>,
+    ) -> Result<Vec<StackEvent>> {
+        let (tx, mut rx) = mpsc::channel(self.stacks.len());
+        let handles: Vec<_> = stacks
+            .map(|stack_name| {
+                tracing::debug!(name = ?stack_name, "fetching events for stack");
+                let mut tx = tx.clone();
+                let fetcher = Arc::clone(&self.fetcher);
+                let stack_name = stack_name.clone();
+                tracing::debug!("spawning task");
+                tokio::spawn(async move {
+                    tracing::debug!("spawned task");
+                    let mut next_token: Option<String> = None;
+                    let mut all_events = Vec::new();
+
+                    loop {
+                        let input = DescribeStackEventsInput {
+                            stack_name: Some(stack_name.clone()),
+                            next_token: next_token.clone(),
+                        };
+
+                        tracing::debug!(input = ?input, "sending request with payload");
+                        let res = fetcher
+                            .describe_stack_events(input)
+                            .instrument(tracing::debug_span!("fetching events"))
+                            .await;
+
+                        match res {
+                            Ok(response) => {
+                                tracing::debug!("got successful response");
+                                match response.stack_events {
+                                    Some(batch) => {
+                                        all_events.extend_from_slice(&batch);
+                                    }
+                                    None => {
+                                        tracing::debug!("reached end of events");
+                                        break;
+                                    }
+                                }
+
+                                match response.next_token {
+                                    Some(new_next_token) => next_token = Some(new_next_token),
+                                    None => break,
+                                }
+                            }
+                            Err(e) => {
+                                todo!("{:?}", e);
+                                /*
+                                Err(e) => {
+                                    tracing::debug!("got failed response");
+                                    match e {
+                                        RusotoError::Service(ref error) => {
+                                            tracing::error!(err = %error, "rusoto error");
+                                            return Err(Error::Rusoto(e)).wrap_err("rusoto error");
+                                        }
+                                        RusotoError::Credentials(ref creds) => {
+                                            tracing::error!(creds = ?creds, "credentials err");
+                                            return Err(Error::NoCredentials).wrap_err("credentials error");
+                                        }
+                                        RusotoError::Unknown(response) => {
+                                            let body_str = std::str::from_utf8(&response.body)
+                                                .wrap_err("error decoding response body as utf8 string")?;
+                                            let error = crate::error::ErrorResponse::from_str(body_str)
+                                                .wrap_err("parsing error response")?;
+
+                                            let underlying = match error.error.code.as_str() {
+                                                "Throttling" => Error::RateLimitExceeded,
+                                                "ExpiredToken" => Error::CredentialsExpired,
+                                                "ValidationError" => Error::NoStack,
+                                                _ => Error::ErrorResponse(error),
+                                            };
+                                            return Err(underlying).wrap_err("rusoto error");
+                                        }
+                                        _ => {
+                                            tracing::error!(err = ?e, "other sort of error");
+                                            return Err(Error::Other(format!("{:?}", e))).wrap_err("other error");
+                                        }
+                                    }
+                                }
+                                */
+                            }
+                        };
+                    }
+
+                    tx.send(all_events)
+                        .await
+                        .wrap_err("error sending events over channel")?;
+
+                    Ok::<(), eyre::Error>(())
+                })
+            })
+            .collect();
+
+        join_all(handles).await;
+
+        drop(tx);
+
+        let mut all_events = Vec::new();
+        tracing::debug!("waiting for events");
+        while let Some(res) = rx.recv().await {
+            all_events.extend(res);
+        }
+
+        all_events.sort_by(event_sort_key);
+
+        Ok(all_events)
     }
 }
 
