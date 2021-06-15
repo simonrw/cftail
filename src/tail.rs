@@ -280,7 +280,7 @@ where
                                 }
                             }
                             Err(e) => {
-                                tracing::warn!("got failed response");
+                                tracing::warn!(error = ?e, "got failed response");
                                 match e {
                                     RusotoError::Service(ref error) => {
                                         tracing::error!(err = %error, "rusoto error");
@@ -326,7 +326,12 @@ where
             })
             .collect();
 
-        join_all(handles).await;
+        for res in join_all(handles).await {
+            let res = res?;
+            if let Err(e) = res {
+                return Err(e.into());
+            }
+        }
 
         drop(tx);
 
