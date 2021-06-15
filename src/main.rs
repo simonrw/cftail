@@ -51,12 +51,20 @@ fn parse_since_argument(src: &str) -> Result<DateTime<Utc>> {
 }
 
 #[derive(StructOpt)]
+#[structopt(author = "Simon Walker")]
+/// Tail CloudFormation deployments
+///
+/// Watch a log of deployment events for CloudFormation stacks from your console.
 struct Opts {
+    /// Name of the stack to tail
     stack_name: String,
 
+    /// When to start fetching data from. This could be a timestamp, text string, or the words
+    /// `today` or `yesterday`
     #[structopt(short, long, parse(try_from_str = parse_since_argument))]
     since: Option<DateTime<Utc>>,
 
+    /// Also fetch nested stacks and their deploy status
     #[structopt(short, long)]
     nested: bool,
 }
