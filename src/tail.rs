@@ -252,40 +252,39 @@ where
                                 }
                             }
                             Err(e) => {
-                                todo!("{:?}", e);
-                                /*
-                                Err(e) => {
-                                    tracing::debug!("got failed response");
-                                    match e {
-                                        RusotoError::Service(ref error) => {
-                                            tracing::error!(err = %error, "rusoto error");
-                                            return Err(Error::Rusoto(e)).wrap_err("rusoto error");
-                                        }
-                                        RusotoError::Credentials(ref creds) => {
-                                            tracing::error!(creds = ?creds, "credentials err");
-                                            return Err(Error::NoCredentials).wrap_err("credentials error");
-                                        }
-                                        RusotoError::Unknown(response) => {
-                                            let body_str = std::str::from_utf8(&response.body)
-                                                .wrap_err("error decoding response body as utf8 string")?;
-                                            let error = crate::error::ErrorResponse::from_str(body_str)
-                                                .wrap_err("parsing error response")?;
+                                tracing::debug!("got failed response");
+                                match e {
+                                    RusotoError::Service(ref error) => {
+                                        tracing::error!(err = %error, "rusoto error");
+                                        return Err(Error::Rusoto(e)).wrap_err("rusoto error");
+                                    }
+                                    RusotoError::Credentials(ref creds) => {
+                                        tracing::error!(creds = ?creds, "credentials err");
+                                        return Err(Error::NoCredentials)
+                                            .wrap_err("credentials error");
+                                    }
+                                    RusotoError::Unknown(response) => {
+                                        let body_str = std::str::from_utf8(&response.body)
+                                            .wrap_err(
+                                                "error decoding response body as utf8 string",
+                                            )?;
+                                        let error = crate::error::ErrorResponse::from_str(body_str)
+                                            .wrap_err("parsing error response")?;
 
-                                            let underlying = match error.error.code.as_str() {
-                                                "Throttling" => Error::RateLimitExceeded,
-                                                "ExpiredToken" => Error::CredentialsExpired,
-                                                "ValidationError" => Error::NoStack,
-                                                _ => Error::ErrorResponse(error),
-                                            };
-                                            return Err(underlying).wrap_err("rusoto error");
-                                        }
-                                        _ => {
-                                            tracing::error!(err = ?e, "other sort of error");
-                                            return Err(Error::Other(format!("{:?}", e))).wrap_err("other error");
-                                        }
+                                        let underlying = match error.error.code.as_str() {
+                                            "Throttling" => Error::RateLimitExceeded,
+                                            "ExpiredToken" => Error::CredentialsExpired,
+                                            "ValidationError" => Error::NoStack,
+                                            _ => Error::ErrorResponse(error),
+                                        };
+                                        return Err(underlying).wrap_err("rusoto error");
+                                    }
+                                    _ => {
+                                        tracing::error!(err = ?e, "other sort of error");
+                                        return Err(Error::Other(format!("{:?}", e)))
+                                            .wrap_err("other error");
                                     }
                                 }
-                                */
                             }
                         };
                     }
