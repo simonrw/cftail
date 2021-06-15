@@ -302,7 +302,7 @@ where
                                         let underlying = match error.error.code.as_str() {
                                             "Throttling" => Error::RateLimitExceeded,
                                             "ExpiredToken" => Error::CredentialsExpired,
-                                            "ValidationError" => Error::NoStack,
+                                            "ValidationError" => Error::NoStack(stack_name.clone()),
                                             _ => Error::ErrorResponse(error),
                                         };
                                         return Err(underlying).wrap_err("rusoto error");
