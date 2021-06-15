@@ -7,7 +7,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use structopt::StructOpt;
-use termcolor::{ColorChoice, StandardStream};
 use tokio::time::delay_for;
 
 mod error;

@@ -150,7 +150,7 @@ where
         if resource_name == self.config.original_stack_name {
             let mut spec = ColorSpec::new();
             spec.set_fg(Some(Color::Yellow));
-            self.writer.set_color(&spec).unwrap();
+            self.writer.set_color(&spec).wrap_err("setting color")?;
             if self.config.nested {
                 write!(
                     self.writer,
