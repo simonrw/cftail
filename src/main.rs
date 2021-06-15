@@ -13,11 +13,13 @@ use tokio::time::delay_for;
 mod error;
 mod nested_stacks;
 mod stack_status;
+mod stacks;
 mod tail;
 mod utils;
 mod writer;
 
 use crate::error::Error;
+use crate::stacks::build_stack_list;
 use crate::tail::{Tail, TailConfig};
 use crate::writer::Writer;
 
@@ -58,8 +60,8 @@ fn parse_since_argument(src: &str) -> Result<DateTime<Utc>> {
 ///
 /// Watch a log of deployment events for CloudFormation stacks from your console.
 struct Opts {
-    /// Name of the stack to tail
-    stack_name: String,
+    /// Name of the stacks to tail
+    stack_names: Vec<String>,
 
     /// When to start fetching data from. This could be a timestamp, text string, or the words
     /// `today` or `yesterday`
@@ -79,7 +81,7 @@ async fn main() {
     let opts = Opts::from_args();
     let since = opts.since.unwrap_or_else(|| Utc::now());
 
-    tracing::info!(stack_name = %opts.stack_name, since = %since, "tailing stack events");
+    tracing::info!(stack_names = ?opts.stack_names, since = %since, nested = ?opts.nested, "tailing stack events");
 
     let original_stack_name = opts.stack_name.clone();
 
@@ -91,20 +93,13 @@ async fn main() {
         tracing::debug!(region = ?region, "chosen region");
 
         let client = CloudFormationClient::new(region);
-        let stacks = if opts.nested {
-            nested_stacks::fetch_nested_stack_names(&client, &opts.stack_name)
-                .await
-                .expect("fetching nested stacks")
-        } else {
-            let mut stacks = HashSet::new();
-            stacks.insert(opts.stack_name.clone());
-            stacks
-        };
+        let stack_info = build_stack_list(&client, &opts.stack_names, opts.nested)
+            .await
+            .expect("building stack list");
 
         let config = TailConfig {
-            original_stack_name: &original_stack_name,
             since,
-            stacks: &stacks,
+            stack_info: &stack_info,
             nested: opts.nested,
         };
 

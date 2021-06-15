@@ -17,6 +17,7 @@ use tokio::time::delay_for;
 use tracing::Instrument;
 
 use crate::error::Error;
+use crate::stacks::StackInfo;
 
 fn event_sort_key(a: &StackEvent, b: &StackEvent) -> std::cmp::Ordering {
     let a_timestamp = DateTime::parse_from_rfc3339(&a.timestamp).unwrap();
@@ -25,11 +26,10 @@ fn event_sort_key(a: &StackEvent, b: &StackEvent) -> std::cmp::Ordering {
     a_timestamp.partial_cmp(&b_timestamp).unwrap()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct TailConfig<'a> {
-    pub(crate) original_stack_name: &'a str,
     pub(crate) since: DateTime<Utc>,
-    pub(crate) stacks: &'a HashSet<String>,
+    pub(crate) stack_info: &'a StackInfo,
     pub(crate) nested: bool,
 }
 
@@ -159,36 +159,31 @@ where
 
         write!(self.writer, "{timestamp}: ", timestamp = timestamp)
             .wrap_err("printing timestamp")?;
-        if resource_name == self.config.original_stack_name {
+        if self
+            .config
+            .stack_info
+            .original_names
+            .contains(resource_name)
+        {
             let mut spec = ColorSpec::new();
             spec.set_fg(Some(Color::Yellow));
             self.writer.set_color(&spec).wrap_err("setting color")?;
-            if self.config.nested {
-                write!(
-                    self.writer,
-                    "{stack_name} - {name}",
-                    stack_name = stack_name,
-                    name = resource_name
-                )
-                .wrap_err("printing resource name")?;
-            } else {
-                write!(self.writer, "{name}", name = resource_name)
-                    .wrap_err("printing resource name")?;
-            }
+            write!(
+                self.writer,
+                "{stack_name} - {name}",
+                stack_name = stack_name,
+                name = resource_name
+            )
+            .wrap_err("printing resource name")?;
             self.writer.reset().wrap_err("resetting colour")?;
         } else {
-            if self.config.nested {
-                write!(
-                    self.writer,
-                    "{stack_name} - {name}",
-                    stack_name = stack_name,
-                    name = resource_name
-                )
-                .wrap_err("printing resource name")?;
-            } else {
-                write!(self.writer, "{name}", name = resource_name)
-                    .wrap_err("printing resource name")?;
-            }
+            write!(
+                self.writer,
+                "{stack_name} - {name}",
+                stack_name = stack_name,
+                name = resource_name
+            )
+            .wrap_err("printing resource name")?;
         }
 
         write!(self.writer, " | ").wrap_err("printing pipe character")?;
@@ -206,7 +201,13 @@ where
             writeln!(self.writer, " ({reason})", reason = reason)
                 .wrap_err("printing failure reason")?;
         } else {
-            if stack_status.is_complete() && resource_name == self.config.original_stack_name {
+            if stack_status.is_complete()
+                && self
+                    .config
+                    .stack_info
+                    .original_names
+                    .contains(resource_name)
+            {
                 writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
             } else {
                 writeln!(self.writer, "").wrap_err("printing end of event")?;
@@ -222,7 +223,7 @@ where
         stacks: impl Iterator<Item = &String>,
         since: DateTime<Utc>,
     ) -> Result<Vec<StackEvent>> {
-        let (tx, mut rx) = mpsc::channel(self.config.stacks.len());
+        let (tx, mut rx) = mpsc::channel(self.config.stack_info.names.len());
         let handles: Vec<_> = stacks
             .map(|stack_name| {
                 tracing::debug!(name = ?stack_name, "fetching events for stack");
@@ -392,10 +393,18 @@ mod tests {
             stacks.insert(String::from("SampleStack"));
             stacks
         };
+        let original_stack_names = {
+            let mut s = HashSet::new();
+            s.insert(String::from("SampleStack"));
+            s
+        };
+        let stack_info = StackInfo {
+            original_names: original_stack_names,
+            names: stacks,
+        };
         let config = TailConfig {
-            original_stack_name: "SampleStack",
             since: Utc.timestamp(0, 0),
-            stacks: &stacks,
+            stack_info: &stack_info,
             nested: false,
         };
         let mut writer = StubWriter::default();
