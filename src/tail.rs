@@ -314,60 +314,65 @@ where
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use chrono::TimeZone;
-//     use rusoto_mock::{
-//         MockCredentialsProvider, MockRequestDispatcher, MockResponseReader, ReadMockResponse,
-//     };
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+    use rusoto_mock::{
+        MockCredentialsProvider, MockRequestDispatcher, MockResponseReader, ReadMockResponse,
+    };
 
-//     #[derive(Debug)]
-//     struct StubWriter;
+    #[derive(Debug)]
+    struct StubWriter;
 
-//     impl std::io::Write for StubWriter {
-//         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-//             Ok(buf.len())
-//         }
+    impl std::io::Write for StubWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            Ok(buf.len())
+        }
 
-//         fn flush(&mut self) -> std::io::Result<()> {
-//             Ok(())
-//         }
-//     }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
 
-//     impl WriteColor for StubWriter {
-//         fn supports_color(&self) -> bool {
-//             true
-//         }
+    impl WriteColor for StubWriter {
+        fn supports_color(&self) -> bool {
+            true
+        }
 
-//         fn set_color(&mut self, _spec: &ColorSpec) -> std::io::Result<()> {
-//             Ok(())
-//         }
+        fn set_color(&mut self, _spec: &ColorSpec) -> std::io::Result<()> {
+            Ok(())
+        }
 
-//         fn reset(&mut self) -> std::io::Result<()> {
-//             Ok(())
-//         }
-//     }
+        fn reset(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
 
-//     #[tokio::test]
-//     async fn test_prefetch() {
-//         tracing_subscriber::fmt::init();
+    #[tokio::test]
+    async fn test_prefetch() {
+        tracing_subscriber::fmt::init();
 
-//         let response = MockResponseReader::read_response("tests/responses", "single_event.xml");
-//         let dispatcher = MockRequestDispatcher::with_status(200).with_body(&response);
-//         let client =
-//             CloudFormationClient::new_with(dispatcher, MockCredentialsProvider, Default::default());
-//         let mut seen_events = HashSet::new();
-//         let mut tail = Tail::new(
-//             &client,
-//             StubWriter {},
-//             "SampleStack",
-//             Utc.timestamp(0, 0),
-//             &mut seen_events,
-//         );
+        let response = MockResponseReader::read_response("tests/responses", "single_event.xml");
+        let dispatcher = MockRequestDispatcher::with_status(200).with_body(&response);
+        let client =
+            CloudFormationClient::new_with(dispatcher, MockCredentialsProvider, Default::default());
+        let mut seen_events = HashSet::new();
+        let stacks = {
+            let mut stacks = HashSet::new();
+            stacks.insert(String::from("SampleStack"));
+            stacks
+        };
+        let config = TailConfig {
+            original_stack_name: "SampleStack",
+            since: Utc.timestamp(0, 0),
+            stacks: &stacks,
+            nested: false,
+        };
+        let mut tail = Tail::new(config, Arc::new(client), StubWriter {}, &mut seen_events);
 
-//         tail.prefetch().await.unwrap();
+        tail.prefetch().await.unwrap();
 
-//         assert_eq!(seen_events.len(), 1);
-//     }
-// }
+        assert_eq!(seen_events.len(), 1);
+    }
+}
