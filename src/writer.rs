@@ -1,25 +1,23 @@
 use std::fmt::Debug;
-use termcolor::{ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{ColorSpec, StandardStream, WriteColor};
 
-pub(crate) struct Writer {
-    stream: StandardStream,
+pub(crate) struct Writer<'a> {
+    stream: &'a mut StandardStream,
 }
 
-impl Writer {
-    pub(crate) fn new() -> Self {
-        Self {
-            stream: StandardStream::stdout(ColorChoice::Auto),
-        }
+impl<'a> Writer<'a> {
+    pub(crate) fn new(stream: &'a mut StandardStream) -> Self {
+        Self { stream }
     }
 }
 
-impl Debug for Writer {
+impl<'a> Debug for Writer<'a> {
     fn fmt(&self, w: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         w.write_str("writer")
     }
 }
 
-impl std::io::Write for Writer {
+impl<'a> std::io::Write for Writer<'a> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let mut lock = self.stream.lock();
         lock.write(buf)
@@ -31,7 +29,7 @@ impl std::io::Write for Writer {
     }
 }
 
-impl WriteColor for Writer {
+impl<'a> WriteColor for Writer<'a> {
     fn supports_color(&self) -> bool {
         true
     }

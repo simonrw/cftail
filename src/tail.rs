@@ -35,7 +35,7 @@ pub(crate) struct TailConfig<'a> {
 
 pub(crate) struct Tail<'a, W> {
     fetcher: Arc<CloudFormationClient>,
-    writer: W,
+    writer: &'a mut W,
     seen_events: &'a mut HashSet<String>,
     config: TailConfig<'a>,
 }
@@ -47,7 +47,7 @@ where
     pub(crate) fn new(
         config: TailConfig<'a>,
         fetcher: Arc<CloudFormationClient>,
-        writer: W,
+        writer: &'a mut W,
         seen_events: &'a mut HashSet<String>,
     ) -> Self {
         Self {
@@ -369,7 +369,9 @@ mod tests {
             stacks: &stacks,
             nested: false,
         };
-        let mut tail = Tail::new(config, Arc::new(client), StubWriter {}, &mut seen_events);
+        let mut writer = StubWriter {};
+
+        let mut tail = Tail::new(config, Arc::new(client), &mut writer, &mut seen_events);
 
         tail.prefetch().await.unwrap();
 

@@ -7,6 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use structopt::StructOpt;
+use termcolor::{ColorChoice, StandardStream};
 use tokio::time::delay_for;
 
 mod error;
@@ -82,6 +83,9 @@ async fn main() {
     let mut seen_events = HashSet::new();
     let original_stack_name = opts.stack_name.clone();
 
+    let mut stdout = StandardStream::stdout(ColorChoice::Auto);
+    let mut writer = Writer::new(&mut stdout);
+
     loop {
         let region = Region::default();
         tracing::debug!(region = ?region, "chosen region");
@@ -97,8 +101,6 @@ async fn main() {
             stacks
         };
 
-        let handle = Writer::new();
-
         let config = TailConfig {
             original_stack_name: &original_stack_name,
             since,
@@ -106,7 +108,7 @@ async fn main() {
             nested: opts.nested,
         };
 
-        let mut tail = Tail::new(config, Arc::new(client), handle, &mut seen_events);
+        let mut tail = Tail::new(config, Arc::new(client), &mut writer, &mut seen_events);
 
         tracing::info!("prefetching tasks");
         match tail.prefetch().await {
