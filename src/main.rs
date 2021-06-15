@@ -4,6 +4,7 @@ use rusoto_cloudformation::CloudFormationClient;
 use rusoto_core::Region;
 use std::collections::HashSet;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 use structopt::StructOpt;
 use termcolor::{ColorChoice, StandardStream};
@@ -56,6 +57,9 @@ struct Opts {
 
     #[structopt(short, long, parse(try_from_str = parse_since_argument))]
     since: Option<DateTime<Utc>>,
+
+    #[structopt(short, long)]
+    nested: bool,
 }
 
 #[tokio::main]
@@ -75,11 +79,21 @@ async fn main() {
         tracing::debug!(region = ?region, "chosen region");
 
         let client = CloudFormationClient::new(region);
+        let stacks = if opts.nested {
+            nested_stacks::fetch_nested_stack_names(&client, &opts.stack_name)
+                .await
+                .expect("fetching nested stacks")
+        } else {
+            let mut stacks = HashSet::new();
+            stacks.insert(opts.stack_name.clone());
+            stacks
+        };
 
         let handle = Writer::new();
 
-        let mut tail = Tail::new(&client, handle, &opts.stack_name, since, &mut seen_events);
+        let mut tail = Tail::new(Arc::new(client), handle, &stacks, since, &mut seen_events);
 
+        tracing::info!("prefetching tasks");
         match tail.prefetch().await {
             Ok(_) => {}
             Err(e) => match e.downcast_ref::<Error>() {
@@ -111,27 +125,27 @@ async fn main() {
         }
 
         tracing::debug!("starting poll loop");
-        match tail.poll().await {
-            Ok(_) => unreachable!(),
-            Err(e) => match e.downcast_ref::<Error>() {
-                Some(Error::CredentialsExpired) => {
-                    eprintln!("Error: your credentials have expired");
-                    std::process::exit(1);
-                }
-                Some(Error::RateLimitExceeded) => {
-                    tracing::warn!("rate limit exceeded");
-                    delay_for(Duration::from_secs(5)).await;
-                }
-                Some(e) => {
-                    tracing::error!(err = %e, "unexpected error");
-                    std::process::exit(1);
-                }
-                None => {
-                    tracing::error!(err = %e, "unexpected error");
-                    std::process::exit(1);
-                }
-            },
-        }
+        // match tail.poll().await {
+        //     Ok(_) => unreachable!(),
+        //     Err(e) => match e.downcast_ref::<Error>() {
+        //         Some(Error::CredentialsExpired) => {
+        //             eprintln!("Error: your credentials have expired");
+        //             std::process::exit(1);
+        //         }
+        //         Some(Error::RateLimitExceeded) => {
+        //             tracing::warn!("rate limit exceeded");
+        //             delay_for(Duration::from_secs(5)).await;
+        //         }
+        //         Some(e) => {
+        //             tracing::error!(err = %e, "unexpected error");
+        //             std::process::exit(1);
+        //         }
+        //         None => {
+        //             tracing::error!(err = %e, "unexpected error");
+        //             std::process::exit(1);
+        //         }
+        //     },
+        // }
 
         tracing::trace!("building another client");
     }
