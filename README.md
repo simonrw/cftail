@@ -13,14 +13,14 @@ With the `--nested` flag, any nested stacks will also be included in the output.
 
 
 ```
-cftail 0.3.0
+cftail 0.3.0-dev.1
 Simon Walker
 Tail CloudFormation deployments
 
 Watch a log of deployment events for CloudFormation stacks from your console.
 
 USAGE:
-    cftail [FLAGS] [OPTIONS] <stack-name>
+    cftail [FLAGS] [OPTIONS] [stack-names]...
 
 FLAGS:
     -h, --help       
@@ -39,7 +39,6 @@ OPTIONS:
             `yesterday`
 
 ARGS:
-    <stack-name>    
-            Name of the stack to tail
-
+    <stack-names>...    
+            Name of the stacks to tail
 ```
