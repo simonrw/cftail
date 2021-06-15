@@ -148,6 +148,10 @@ async fn main() {
                     tracing::warn!("rate limit exceeded");
                     delay_for(Duration::from_secs(5)).await;
                 }
+                Some(Error::NoStack(name)) => {
+                    eprintln!("could not find stack {}", name);
+                    std::process::exit(1);
+                }
                 Some(e) => {
                     tracing::error!(err = %e, "unexpected error");
                     std::process::exit(1);

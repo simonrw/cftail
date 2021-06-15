@@ -280,7 +280,7 @@ where
                                 }
                             }
                             Err(e) => {
-                                tracing::debug!("got failed response");
+                                tracing::warn!("got failed response");
                                 match e {
                                     RusotoError::Service(ref error) => {
                                         tracing::error!(err = %error, "rusoto error");
