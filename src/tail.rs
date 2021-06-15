@@ -25,12 +25,19 @@ fn event_sort_key(a: &StackEvent, b: &StackEvent) -> std::cmp::Ordering {
     a_timestamp.partial_cmp(&b_timestamp).unwrap()
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TailConfig<'a> {
+    pub(crate) original_stack_name: &'a str,
+    pub(crate) since: DateTime<Utc>,
+    pub(crate) stacks: &'a HashSet<String>,
+    pub(crate) nested: bool,
+}
+
 pub(crate) struct Tail<'a, W> {
     fetcher: Arc<CloudFormationClient>,
     writer: W,
-    stacks: &'a HashSet<String>,
-    since: DateTime<Utc>,
     seen_events: &'a mut HashSet<String>,
+    config: TailConfig<'a>,
 }
 
 impl<'a, W> Tail<'a, W>
@@ -38,17 +45,15 @@ where
     W: WriteColor + Debug,
 {
     pub(crate) fn new(
+        config: TailConfig<'a>,
         fetcher: Arc<CloudFormationClient>,
         writer: W,
-        stacks: &'a HashSet<String>,
-        since: DateTime<Utc>,
         seen_events: &'a mut HashSet<String>,
     ) -> Self {
         Self {
+            config,
             fetcher,
             writer,
-            stacks,
-            since,
             seen_events,
         }
     }
@@ -59,7 +64,7 @@ where
     pub(crate) async fn prefetch(&mut self) -> Result<()> {
         tracing::debug!("prefetching events");
         // fetch all of the stack events for the nested stacks
-        let all_events = self.fetch_events(self.stacks.iter()).await?;
+        let all_events = self.fetch_events(self.config.stacks.iter()).await?;
         tracing::debug!(nevents = all_events.len(), "got all past events");
 
         if all_events.is_empty() {
@@ -70,7 +75,7 @@ where
         for e in &all_events {
             let timestamp =
                 DateTime::parse_from_rfc3339(e.timestamp.as_str()).expect("parsing timestamp");
-            if timestamp > self.since {
+            if timestamp > self.config.since {
                 self.print_event(&e).expect("printing");
             }
             self.seen_events.insert(e.event_id.clone());
@@ -80,7 +85,7 @@ where
 
     #[tracing::instrument(skip(self))]
     pub(crate) async fn poll(&mut self) -> Result<()> {
-        tracing::debug!(start_time = ?self.since, "showing logs from now");
+        tracing::debug!(start_time = ?self.config.since, "showing logs from now");
 
         loop {
             if let Err(e) = self.poll_step().await {
@@ -108,7 +113,7 @@ where
     #[tracing::instrument(skip(self))]
     async fn poll_step(&mut self) -> Result<()> {
         tracing::info!(n_seen_events = ?self.seen_events.len(), "running poll step");
-        let all_events = self.fetch_events(self.stacks.iter()).await?;
+        let all_events = self.fetch_events(self.config.stacks.iter()).await?;
         if all_events.is_empty() {
             tracing::debug!("no events found");
             return Ok(());
@@ -142,21 +147,37 @@ where
 
         write!(self.writer, "{timestamp}: ", timestamp = timestamp)
             .wrap_err("printing timestamp")?;
-        // if resource_name == self.stack_name {
-        //     let mut spec = ColorSpec::new();
-        //     spec.set_fg(Some(Color::Yellow));
-        //     self.writer.set_color(&spec).unwrap();
-        write!(
-            self.writer,
-            "{stack_name}:{name}",
-            stack_name = stack_name,
-            name = resource_name
-        )
-        .wrap_err("printing resource name")?;
-        //     self.writer.reset().wrap_err("resetting colour")?;
-        // } else {
-        // write!(self.writer, "{name}", name = resource_name).wrap_err("printing resource name")?;
-        // }
+        if resource_name == self.config.original_stack_name {
+            let mut spec = ColorSpec::new();
+            spec.set_fg(Some(Color::Yellow));
+            self.writer.set_color(&spec).unwrap();
+            if self.config.nested {
+                write!(
+                    self.writer,
+                    "{stack_name} - {name}",
+                    stack_name = stack_name,
+                    name = resource_name
+                )
+                .wrap_err("printing resource name")?;
+            } else {
+                write!(self.writer, "{name}", name = resource_name)
+                    .wrap_err("printing resource name")?;
+            }
+            self.writer.reset().wrap_err("resetting colour")?;
+        } else {
+            if self.config.nested {
+                write!(
+                    self.writer,
+                    "{stack_name} - {name}",
+                    stack_name = stack_name,
+                    name = resource_name
+                )
+                .wrap_err("printing resource name")?;
+            } else {
+                write!(self.writer, "{name}", name = resource_name)
+                    .wrap_err("printing resource name")?;
+            }
+        }
 
         write!(self.writer, " | ").wrap_err("printing pipe character")?;
 
@@ -173,11 +194,11 @@ where
             writeln!(self.writer, " ({reason})", reason = reason)
                 .wrap_err("printing failure reason")?;
         } else {
-            // if stack_status.is_complete() && resource_name == self.stack_name {
-            //     writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
-            // } else {
-            writeln!(self.writer, "").wrap_err("printing end of event")?;
-            // }
+            if stack_status.is_complete() && resource_name == self.config.original_stack_name {
+                writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
+            } else {
+                writeln!(self.writer, "").wrap_err("printing end of event")?;
+            }
         }
 
         Ok(())
@@ -187,7 +208,7 @@ where
         &mut self,
         stacks: impl Iterator<Item = &String>,
     ) -> Result<Vec<StackEvent>> {
-        let (tx, mut rx) = mpsc::channel(self.stacks.len());
+        let (tx, mut rx) = mpsc::channel(self.config.stacks.len());
         let handles: Vec<_> = stacks
             .map(|stack_name| {
                 tracing::debug!(name = ?stack_name, "fetching events for stack");

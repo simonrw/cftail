@@ -17,7 +17,7 @@ mod tail;
 mod writer;
 
 use crate::error::Error;
-use crate::tail::Tail;
+use crate::tail::{Tail, TailConfig};
 use crate::writer::Writer;
 
 // Custom parser for parsing the datetime as either a timestamp, or as a handy string.
@@ -73,6 +73,7 @@ async fn main() {
     tracing::info!(stack_name = %opts.stack_name, since = %since, "tailing stack events");
 
     let mut seen_events = HashSet::new();
+    let original_stack_name = opts.stack_name.clone();
 
     loop {
         let region = Region::default();
@@ -91,7 +92,14 @@ async fn main() {
 
         let handle = Writer::new();
 
-        let mut tail = Tail::new(Arc::new(client), handle, &stacks, since, &mut seen_events);
+        let config = TailConfig {
+            original_stack_name: &original_stack_name,
+            since,
+            stacks: &stacks,
+            nested: opts.nested,
+        };
+
+        let mut tail = Tail::new(config, Arc::new(client), handle, &mut seen_events);
 
         tracing::info!("prefetching tasks");
         match tail.prefetch().await {
@@ -102,7 +110,7 @@ async fn main() {
                     std::process::exit(1);
                 }
                 Some(Error::NoStack) => {
-                    eprintln!("Error: could not find stack {}", opts.stack_name);
+                    eprintln!("Error: could not find stack {}", &opts.stack_name);
                     std::process::exit(1);
                 }
                 Some(Error::CredentialsExpired) => {
