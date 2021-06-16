@@ -1,5 +1,7 @@
 use chrono::{prelude::*, Duration as ChronoDuration};
 use eyre::{Result, WrapErr};
+#[cfg(manpages)]
+use man::prelude::*;
 use rusoto_cloudformation::CloudFormationClient;
 use rusoto_core::Region;
 use std::str::FromStr;
@@ -70,6 +72,10 @@ struct Opts {
     /// Also fetch nested stacks and their deploy status
     #[structopt(short, long)]
     nested: bool,
+
+    #[cfg(manpages)]
+    #[structopt(short, long)]
+    manpages: bool,
 }
 
 #[tokio::main]
