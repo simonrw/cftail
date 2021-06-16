@@ -36,7 +36,6 @@ pub(crate) struct TailConfig<'a> {
 pub(crate) struct Tail<'a, W> {
     fetcher: Arc<CloudFormationClient>,
     writer: &'a mut W,
-    seen_events: &'a mut HashSet<String>,
     config: TailConfig<'a>,
 }
 
@@ -48,23 +47,23 @@ where
         config: TailConfig<'a>,
         fetcher: Arc<CloudFormationClient>,
         writer: &'a mut W,
-        seen_events: &'a mut HashSet<String>,
     ) -> Self {
         Self {
             config,
             fetcher,
             writer,
-            seen_events,
         }
     }
 
     // Fetch all of the events since the beginning of time, so that we can ensure all
     // of the events are sorted.
-    // #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self))]
     pub(crate) async fn prefetch(&mut self) -> Result<()> {
         tracing::debug!("prefetching events");
         // fetch all of the stack events for the nested stacks
-        let all_events = self.fetch_events(self.config.stacks.iter()).await?;
+        let all_events = self
+            .fetch_events(self.config.stacks.iter(), self.config.since)
+            .await?;
         tracing::debug!(nevents = all_events.len(), "got all past events");
 
         if all_events.is_empty() {
@@ -72,14 +71,19 @@ where
             return Ok(());
         }
 
+        let mut latest_time = self.config.since;
         for e in &all_events {
-            let timestamp =
-                DateTime::parse_from_rfc3339(e.timestamp.as_str()).expect("parsing timestamp");
-            if timestamp > self.config.since {
+            let timestamp = crate::utils::parse_event_datetime(e.timestamp.as_str())?;
+            if timestamp > latest_time {
                 self.print_event(&e).expect("printing");
+                tracing::trace!(latest_time = ?latest_time, timestamp = ?timestamp, "later timestamp");
+                latest_time = timestamp;
+            } else {
+                unreachable!()
             }
-            self.seen_events.insert(e.event_id.clone());
         }
+        tracing::trace!(latest_time = ?latest_time, "setting config.since");
+        self.config.since = latest_time;
         Ok(())
     }
 
@@ -112,21 +116,29 @@ where
 
     #[tracing::instrument(skip(self))]
     async fn poll_step(&mut self) -> Result<()> {
-        tracing::info!(n_seen_events = ?self.seen_events.len(), "running poll step");
-        let all_events = self.fetch_events(self.config.stacks.iter()).await?;
+        let all_events = self
+            .fetch_events(self.config.stacks.iter(), self.config.since)
+            .await?;
         if all_events.is_empty() {
             tracing::debug!("no events found");
             return Ok(());
         }
 
+        let mut latest_time = self.config.since;
         for event in &all_events {
-            if self.seen_events.contains(&event.event_id) {
-                continue;
+            let timestamp = crate::utils::parse_event_datetime(event.timestamp.as_str())?;
+            if timestamp > latest_time {
+                self.print_event(&event).expect("printing");
+                tracing::trace!(latest_time = ?latest_time, timestamp = ?timestamp, "later timestamp");
+                latest_time = timestamp;
+                self.print_event(&event).expect("printing");
+            } else {
+                unreachable!()
             }
-
-            self.print_event(&event).expect("printing");
-            self.seen_events.insert(event.event_id.clone());
         }
+
+        tracing::trace!(latest_time = ?latest_time, "setting config.since");
+        self.config.since = latest_time;
 
         Ok(())
     }
@@ -204,9 +216,11 @@ where
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, stacks))]
     async fn fetch_events(
         &mut self,
         stacks: impl Iterator<Item = &String>,
+        since: DateTime<Utc>,
     ) -> Result<Vec<StackEvent>> {
         let (tx, mut rx) = mpsc::channel(self.config.stacks.len());
         let handles: Vec<_> = stacks
@@ -221,7 +235,7 @@ where
                     let mut next_token: Option<String> = None;
                     let mut all_events = Vec::new();
 
-                    loop {
+                    'poll: loop {
                         let input = DescribeStackEventsInput {
                             stack_name: Some(stack_name.clone()),
                             next_token: next_token.clone(),
@@ -238,7 +252,20 @@ where
                                 tracing::debug!("got successful response");
                                 match response.stack_events {
                                     Some(batch) => {
-                                        all_events.extend_from_slice(&batch);
+                                        for event in batch {
+                                            let timestamp = crate::utils::parse_event_datetime(
+                                                event.timestamp.as_str(),
+                                            )?;
+
+                                            // We know that the events are in reverse chronological
+                                            // order, so if we witness an event with a timestamp
+                                            // that's earlier than what we have already seen, then
+                                            // we know that it has already been presented.
+                                            if timestamp <= since {
+                                                break 'poll;
+                                            }
+                                            all_events.push(event);
+                                        }
                                     }
                                     None => {
                                         tracing::debug!("reached end of events");
@@ -322,11 +349,14 @@ mod tests {
         MockCredentialsProvider, MockRequestDispatcher, MockResponseReader, ReadMockResponse,
     };
 
-    #[derive(Debug)]
-    struct StubWriter;
+    #[derive(Debug, Default)]
+    struct StubWriter {
+        buf: Vec<u8>,
+    }
 
     impl std::io::Write for StubWriter {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.buf.extend_from_slice(buf);
             Ok(buf.len())
         }
 
@@ -357,7 +387,6 @@ mod tests {
         let dispatcher = MockRequestDispatcher::with_status(200).with_body(&response);
         let client =
             CloudFormationClient::new_with(dispatcher, MockCredentialsProvider, Default::default());
-        let mut seen_events = HashSet::new();
         let stacks = {
             let mut stacks = HashSet::new();
             stacks.insert(String::from("SampleStack"));
@@ -369,12 +398,16 @@ mod tests {
             stacks: &stacks,
             nested: false,
         };
-        let mut writer = StubWriter {};
+        let mut writer = StubWriter::default();
 
-        let mut tail = Tail::new(config, Arc::new(client), &mut writer, &mut seen_events);
+        let mut tail = Tail::new(config, Arc::new(client), &mut writer);
 
         tail.prefetch().await.unwrap();
 
-        assert_eq!(seen_events.len(), 1);
+        let buf = std::str::from_utf8(&writer.buf).unwrap();
+        assert_eq!(
+            buf,
+            "2020-11-17T10:38:57.149Z: test-stack | UPDATE_COMPLETE\n"
+        );
     }
 }

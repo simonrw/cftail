@@ -14,6 +14,7 @@ mod error;
 mod nested_stacks;
 mod stack_status;
 mod tail;
+mod utils;
 mod writer;
 
 use crate::error::Error;
@@ -80,7 +81,6 @@ async fn main() {
 
     tracing::info!(stack_name = %opts.stack_name, since = %since, "tailing stack events");
 
-    let mut seen_events = HashSet::new();
     let original_stack_name = opts.stack_name.clone();
 
     let mut stdout = StandardStream::stdout(ColorChoice::Auto);
@@ -108,7 +108,7 @@ async fn main() {
             nested: opts.nested,
         };
 
-        let mut tail = Tail::new(config, Arc::new(client), &mut writer, &mut seen_events);
+        let mut tail = Tail::new(config, Arc::new(client), &mut writer);
 
         tracing::info!("prefetching tasks");
         match tail.prefetch().await {
