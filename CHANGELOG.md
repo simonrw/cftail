@@ -8,4 +8,6 @@
 
 ### Changed
 
+* Improves poll speed by not fetching all events for each poll update [#5](https://github.com/mindriot101/cftail/pull/5)
+
 ### Removed
