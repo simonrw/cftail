@@ -24,7 +24,7 @@ eyre = "0.6.3"
 color-eyre = "0.5.7"
 thiserror = "1.0.22"
 futures = "0.3.15"
-man = { version = "0.3.0", optional = true }
+man = "0.3.0"
 
 [dev-dependencies]
 rusoto_mock = "0.45.0"

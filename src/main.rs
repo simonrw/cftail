@@ -1,7 +1,5 @@
 use chrono::{prelude::*, Duration as ChronoDuration};
 use eyre::{Result, WrapErr};
-#[cfg(manpages)]
-use man::prelude::*;
 use rusoto_cloudformation::CloudFormationClient;
 use rusoto_core::Region;
 use std::str::FromStr;
@@ -55,6 +53,28 @@ fn parse_since_argument(src: &str) -> Result<DateTime<Utc>> {
     Err(Error::ParseSince).wrap_err("error parsing since argument")
 }
 
+fn build_manpages() -> String {
+    use man::prelude::*;
+
+    Manual::new("cftail")
+        .about("Tail cloudformation deployments")
+        .author(Author::new("Simon Walker").email("s.r.walker101@googlemail.com"))
+        .flag(
+            Flag::new()
+                .short("-s")
+                .long("--since")
+                .help("When to start fetching data from"),
+        )
+        .example(
+            Example::new()
+                .text("Tail events from now")
+                .command("cftail <stack name>")
+                .output(""),
+        )
+        .custom(Section::new("usage note").paragraph("Something"))
+        .render()
+}
+
 #[derive(StructOpt)]
 #[structopt(author = "Simon Walker")]
 /// Tail CloudFormation deployments
@@ -73,8 +93,8 @@ struct Opts {
     #[structopt(short, long)]
     nested: bool,
 
-    #[cfg(manpages)]
     #[structopt(short, long)]
+    /// Prints man pages to stdout
     manpages: bool,
 }
 
@@ -84,6 +104,19 @@ async fn main() {
     color_eyre::install().unwrap();
 
     let opts = Opts::from_args();
+
+    if opts.manpages {
+        let page = build_manpages();
+        println!("{}", page);
+        return;
+    }
+
+    if let None = opts.stack_name {
+        eprintln!("No stack name provided");
+        std::process::exit(1);
+    }
+    let stack_name = opts.stack_name.unwrap();
+
     let since = opts.since.unwrap_or_else(|| Utc::now());
 
     tracing::info!(stack_names = ?opts.stack_names, since = %since, nested = ?opts.nested, "tailing stack events");
