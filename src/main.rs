@@ -75,7 +75,7 @@ fn build_manpages() -> String {
         .render()
 }
 
-#[derive(StructOpt)]
+#[derive(Debug, StructOpt)]
 #[structopt(author = "Simon Walker")]
 /// Tail CloudFormation deployments
 ///
@@ -111,11 +111,10 @@ async fn main() {
         return;
     }
 
-    if let None = opts.stack_name {
-        eprintln!("No stack name provided");
+    if opts.stack_names.is_empty() {
+        eprintln!("No stack names provided");
         std::process::exit(1);
     }
-    let stack_name = opts.stack_name.unwrap();
 
     let since = opts.since.unwrap_or_else(|| Utc::now());
 
