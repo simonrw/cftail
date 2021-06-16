@@ -2,7 +2,6 @@ use chrono::{prelude::*, Duration as ChronoDuration};
 use eyre::{Result, WrapErr};
 use rusoto_cloudformation::CloudFormationClient;
 use rusoto_core::Region;
-use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -83,8 +82,6 @@ async fn main() {
 
     tracing::info!(stack_names = ?opts.stack_names, since = %since, nested = ?opts.nested, "tailing stack events");
 
-    let original_stack_name = opts.stack_name.clone();
-
     let mut stdout = StandardStream::stdout(ColorChoice::Auto);
     let mut writer = Writer::new(&mut stdout);
 
@@ -113,8 +110,8 @@ async fn main() {
                     eprintln!("Error: no valid credentials found");
                     std::process::exit(1);
                 }
-                Some(Error::NoStack) => {
-                    eprintln!("Error: could not find stack {}", &opts.stack_name);
+                Some(Error::NoStack(stack_name)) => {
+                    eprintln!("Error: could not find stack {}", stack_name);
                     std::process::exit(1);
                 }
                 Some(Error::CredentialsExpired) => {

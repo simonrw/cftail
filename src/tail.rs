@@ -5,7 +5,6 @@ use rusoto_cloudformation::{
     CloudFormation, CloudFormationClient, DescribeStackEventsInput, StackEvent,
 };
 use rusoto_core::RusotoError;
-use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::str::FromStr;
@@ -62,7 +61,7 @@ where
         tracing::debug!("prefetching events");
         // fetch all of the stack events for the nested stacks
         let all_events = self
-            .fetch_events(self.config.stacks.iter(), self.config.since)
+            .fetch_events(self.config.stack_info.names.iter(), self.config.since)
             .await?;
         tracing::debug!(nevents = all_events.len(), "got all past events");
 
@@ -117,7 +116,7 @@ where
     #[tracing::instrument(skip(self))]
     async fn poll_step(&mut self) -> Result<()> {
         let all_events = self
-            .fetch_events(self.config.stacks.iter(), self.config.since)
+            .fetch_events(self.config.stack_info.names.iter(), self.config.since)
             .await?;
         if all_events.is_empty() {
             tracing::debug!("no events found");
@@ -388,6 +387,7 @@ mod tests {
     #[tokio::test]
     async fn test_prefetch() {
         tracing_subscriber::fmt::init();
+        use std::collections::HashSet;
 
         let response = MockResponseReader::read_response("tests/responses", "single_event.xml");
         let dispatcher = MockRequestDispatcher::with_status(200).with_body(&response);
@@ -421,7 +421,7 @@ mod tests {
         let buf = std::str::from_utf8(&writer.buf).unwrap();
         assert_eq!(
             buf,
-            "2020-11-17T10:38:57.149Z: test-stack | UPDATE_COMPLETE\n"
+            "2020-11-17T10:38:57.149Z: test-stack - test-stack | UPDATE_COMPLETE\n"
         );
     }
 }
