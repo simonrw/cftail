@@ -5,7 +5,6 @@ use rusoto_cloudformation::{
     CloudFormation, CloudFormationClient, DescribeStackEventsInput, StackEvent,
 };
 use rusoto_core::RusotoError;
-use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::str::FromStr;
@@ -17,6 +16,7 @@ use tokio::time::delay_for;
 use tracing::Instrument;
 
 use crate::error::Error;
+use crate::stacks::StackInfo;
 
 fn event_sort_key(a: &StackEvent, b: &StackEvent) -> std::cmp::Ordering {
     let a_timestamp = DateTime::parse_from_rfc3339(&a.timestamp).unwrap();
@@ -25,11 +25,10 @@ fn event_sort_key(a: &StackEvent, b: &StackEvent) -> std::cmp::Ordering {
     a_timestamp.partial_cmp(&b_timestamp).unwrap()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct TailConfig<'a> {
-    pub(crate) original_stack_name: &'a str,
     pub(crate) since: DateTime<Utc>,
-    pub(crate) stacks: &'a HashSet<String>,
+    pub(crate) stack_info: &'a StackInfo,
     pub(crate) nested: bool,
 }
 
@@ -62,7 +61,7 @@ where
         tracing::debug!("prefetching events");
         // fetch all of the stack events for the nested stacks
         let all_events = self
-            .fetch_events(self.config.stacks.iter(), self.config.since)
+            .fetch_events(self.config.stack_info.names.iter(), self.config.since)
             .await?;
         tracing::debug!(nevents = all_events.len(), "got all past events");
 
@@ -117,7 +116,7 @@ where
     #[tracing::instrument(skip(self))]
     async fn poll_step(&mut self) -> Result<()> {
         let all_events = self
-            .fetch_events(self.config.stacks.iter(), self.config.since)
+            .fetch_events(self.config.stack_info.names.iter(), self.config.since)
             .await?;
         if all_events.is_empty() {
             tracing::debug!("no events found");
@@ -159,36 +158,31 @@ where
 
         write!(self.writer, "{timestamp}: ", timestamp = timestamp)
             .wrap_err("printing timestamp")?;
-        if resource_name == self.config.original_stack_name {
+        if self
+            .config
+            .stack_info
+            .original_names
+            .contains(resource_name)
+        {
             let mut spec = ColorSpec::new();
             spec.set_fg(Some(Color::Yellow));
             self.writer.set_color(&spec).wrap_err("setting color")?;
-            if self.config.nested {
-                write!(
-                    self.writer,
-                    "{stack_name} - {name}",
-                    stack_name = stack_name,
-                    name = resource_name
-                )
-                .wrap_err("printing resource name")?;
-            } else {
-                write!(self.writer, "{name}", name = resource_name)
-                    .wrap_err("printing resource name")?;
-            }
+            write!(
+                self.writer,
+                "{stack_name} - {name}",
+                stack_name = stack_name,
+                name = resource_name
+            )
+            .wrap_err("printing resource name")?;
             self.writer.reset().wrap_err("resetting colour")?;
         } else {
-            if self.config.nested {
-                write!(
-                    self.writer,
-                    "{stack_name} - {name}",
-                    stack_name = stack_name,
-                    name = resource_name
-                )
-                .wrap_err("printing resource name")?;
-            } else {
-                write!(self.writer, "{name}", name = resource_name)
-                    .wrap_err("printing resource name")?;
-            }
+            write!(
+                self.writer,
+                "{stack_name} - {name}",
+                stack_name = stack_name,
+                name = resource_name
+            )
+            .wrap_err("printing resource name")?;
         }
 
         write!(self.writer, " | ").wrap_err("printing pipe character")?;
@@ -206,7 +200,13 @@ where
             writeln!(self.writer, " ({reason})", reason = reason)
                 .wrap_err("printing failure reason")?;
         } else {
-            if stack_status.is_complete() && resource_name == self.config.original_stack_name {
+            if stack_status.is_complete()
+                && self
+                    .config
+                    .stack_info
+                    .original_names
+                    .contains(resource_name)
+            {
                 writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
             } else {
                 writeln!(self.writer, "").wrap_err("printing end of event")?;
@@ -222,7 +222,7 @@ where
         stacks: impl Iterator<Item = &String>,
         since: DateTime<Utc>,
     ) -> Result<Vec<StackEvent>> {
-        let (tx, mut rx) = mpsc::channel(self.config.stacks.len());
+        let (tx, mut rx) = mpsc::channel(self.config.stack_info.names.len());
         let handles: Vec<_> = stacks
             .map(|stack_name| {
                 tracing::debug!(name = ?stack_name, "fetching events for stack");
@@ -279,7 +279,7 @@ where
                                 }
                             }
                             Err(e) => {
-                                tracing::debug!("got failed response");
+                                tracing::warn!(error = ?e, "got failed response");
                                 match e {
                                     RusotoError::Service(ref error) => {
                                         tracing::error!(err = %error, "rusoto error");
@@ -301,7 +301,7 @@ where
                                         let underlying = match error.error.code.as_str() {
                                             "Throttling" => Error::RateLimitExceeded,
                                             "ExpiredToken" => Error::CredentialsExpired,
-                                            "ValidationError" => Error::NoStack,
+                                            "ValidationError" => Error::NoStack(stack_name.clone()),
                                             _ => Error::ErrorResponse(error),
                                         };
                                         return Err(underlying).wrap_err("rusoto error");
@@ -325,7 +325,12 @@ where
             })
             .collect();
 
-        join_all(handles).await;
+        for res in join_all(handles).await {
+            let res = res?;
+            if let Err(e) = res {
+                return Err(e.into());
+            }
+        }
 
         drop(tx);
 
@@ -382,6 +387,7 @@ mod tests {
     #[tokio::test]
     async fn test_prefetch() {
         tracing_subscriber::fmt::init();
+        use std::collections::HashSet;
 
         let response = MockResponseReader::read_response("tests/responses", "single_event.xml");
         let dispatcher = MockRequestDispatcher::with_status(200).with_body(&response);
@@ -392,10 +398,18 @@ mod tests {
             stacks.insert(String::from("SampleStack"));
             stacks
         };
+        let original_stack_names = {
+            let mut s = HashSet::new();
+            s.insert(String::from("SampleStack"));
+            s
+        };
+        let stack_info = StackInfo {
+            original_names: original_stack_names,
+            names: stacks,
+        };
         let config = TailConfig {
-            original_stack_name: "SampleStack",
             since: Utc.timestamp(0, 0),
-            stacks: &stacks,
+            stack_info: &stack_info,
             nested: false,
         };
         let mut writer = StubWriter::default();
@@ -407,7 +421,7 @@ mod tests {
         let buf = std::str::from_utf8(&writer.buf).unwrap();
         assert_eq!(
             buf,
-            "2020-11-17T10:38:57.149Z: test-stack | UPDATE_COMPLETE\n"
+            "2020-11-17T10:38:57.149Z: test-stack - test-stack | UPDATE_COMPLETE\n"
         );
     }
 }

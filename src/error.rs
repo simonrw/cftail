@@ -17,7 +17,7 @@ pub(crate) enum Error {
     #[error("credentials expired")]
     CredentialsExpired,
     #[error("no stack found")]
-    NoStack,
+    NoStack(String),
     #[error("general aws error response")]
     ErrorResponse(ErrorResponse),
     #[error("other error {0}")]
