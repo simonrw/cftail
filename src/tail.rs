@@ -130,7 +130,6 @@ where
                 self.print_event(&event).expect("printing");
                 tracing::trace!(latest_time = ?latest_time, timestamp = ?timestamp, "later timestamp");
                 latest_time = timestamp;
-                self.print_event(&event).expect("printing");
             } else {
                 unreachable!()
             }
