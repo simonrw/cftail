@@ -73,12 +73,12 @@ where
         let mut latest_time = self.config.since;
         for e in &all_events {
             let timestamp = crate::utils::parse_event_datetime(e.timestamp.as_str())?;
+            self.print_event(&e).expect("printing");
+            tracing::trace!(latest_time = ?latest_time, timestamp = ?timestamp, "later timestamp");
             if timestamp > latest_time {
-                self.print_event(&e).expect("printing");
-                tracing::trace!(latest_time = ?latest_time, timestamp = ?timestamp, "later timestamp");
                 latest_time = timestamp;
             } else {
-                unreachable!()
+                tracing::warn!(latest_time = ?latest_time, timestamp = ?timestamp, "earlier timestamp");
             }
         }
         tracing::trace!(latest_time = ?latest_time, "setting config.since");
@@ -126,12 +126,12 @@ where
         let mut latest_time = self.config.since;
         for event in &all_events {
             let timestamp = crate::utils::parse_event_datetime(event.timestamp.as_str())?;
+            self.print_event(&event).expect("printing");
+            tracing::trace!(latest_time = ?latest_time, timestamp = ?timestamp, "later timestamp");
             if timestamp > latest_time {
-                self.print_event(&event).expect("printing");
-                tracing::trace!(latest_time = ?latest_time, timestamp = ?timestamp, "later timestamp");
                 latest_time = timestamp;
             } else {
-                unreachable!()
+                tracing::warn!(latest_time = ?latest_time, timestamp = ?timestamp, "earlier timestamp");
             }
         }
 
