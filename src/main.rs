@@ -70,6 +70,10 @@ struct Opts {
     /// Also fetch nested stacks and their deploy status
     #[structopt(short, long)]
     nested: bool,
+
+    /// Do not print stack separators
+    #[structopt(long)]
+    no_show_separators: bool,
 }
 
 #[tokio::main]
@@ -98,6 +102,7 @@ async fn main() {
             since,
             stack_info: &stack_info,
             nested: opts.nested,
+            show_separators: !opts.no_show_separators,
         };
 
         let mut tail = Tail::new(config, Arc::new(client), &mut writer);

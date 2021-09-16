@@ -30,6 +30,7 @@ pub(crate) struct TailConfig<'a> {
     pub(crate) since: DateTime<Utc>,
     pub(crate) stack_info: &'a StackInfo,
     pub(crate) nested: bool,
+    pub(crate) show_separators: bool,
 }
 
 pub(crate) struct Tail<'a, W> {
@@ -174,6 +175,10 @@ where
             )
             .wrap_err("printing resource name")?;
             self.writer.reset().wrap_err("resetting colour")?;
+
+            if self.config.show_separators {
+                self.print_separator().wrap_err("printing separator")?;
+            }
         } else {
             write!(
                 self.writer,
@@ -212,6 +217,16 @@ where
             }
         }
 
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self))]
+    fn print_separator(&mut self) -> Result<()> {
+        if let Some((w, _)) = term_size::dimensions() {
+            let chars = vec!['-'; w];
+            let sep: String = chars.iter().collect();
+            writeln!(self.writer, "{}", sep).wrap_err("writing to writer")?;
+        }
         Ok(())
     }
 
@@ -413,6 +428,7 @@ mod tests {
             since: Utc.timestamp(0, 0),
             stack_info: &stack_info,
             nested: false,
+            show_separators: true,
         };
         let mut writer = StubWriter::default();
 
