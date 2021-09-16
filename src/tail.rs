@@ -305,6 +305,9 @@ where
                                         };
                                         return Err(underlying).wrap_err("rusoto error");
                                     }
+                                    RusotoError::HttpDispatch(e) => {
+                                        tracing::error!(err = ?e, "http dispatch error");
+                                    }
                                     _ => {
                                         tracing::error!(err = ?e, "other sort of error");
                                         return Err(Error::Other(format!("{:?}", e)))
