@@ -175,10 +175,6 @@ where
             )
             .wrap_err("printing resource name")?;
             self.writer.reset().wrap_err("resetting colour")?;
-
-            if self.config.show_separators {
-                self.print_separator().wrap_err("printing separator")?;
-            }
         } else {
             write!(
                 self.writer,
@@ -212,6 +208,9 @@ where
                     .contains(resource_name)
             {
                 writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
+                if self.config.show_separators {
+                    self.print_separator().wrap_err("printing separator")?;
+                }
             } else {
                 writeln!(self.writer, "").wrap_err("printing end of event")?;
             }
@@ -320,8 +319,8 @@ where
                                         };
                                         return Err(underlying).wrap_err("rusoto error");
                                     }
-                                    RusotoError::HttpDispatch(e) => {
-                                        tracing::error!(err = ?e, "http dispatch error");
+                                    RusotoError::HttpDispatch(_e) => {
+                                        // Do nothing, these are usually temporary
                                     }
                                     _ => {
                                         tracing::error!(err = ?e, "other sort of error");
