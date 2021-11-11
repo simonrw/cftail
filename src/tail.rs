@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use eyre::{Result, WrapErr};
 use futures::future::join_all;
+use notify_rust::Notification;
 use rusoto_cloudformation::{
     CloudFormation, CloudFormationClient, DescribeStackEventsInput, StackEvent,
 };
@@ -25,12 +26,40 @@ fn event_sort_key(a: &StackEvent, b: &StackEvent) -> std::cmp::Ordering {
     a_timestamp.partial_cmp(&b_timestamp).unwrap()
 }
 
+#[cfg(target_os = "macos")]
+fn notify() -> Result<()> {
+    Notification::new()
+        .summary("Deploy finished")
+        .body(&format!("deploy finished"))
+        .appname("cftail")
+        .sound_name("Bottle")
+        .show()?;
+    Ok(())
+}
+
+// We can customise this further on linux, but I don't have a copy available
+#[cfg(target_os = "linux")]
+fn notify() -> Result<()> {
+    Notification::new()
+        .summary("Deploy finished")
+        .body(format!("deploy finished"))
+        .appname("cftail")
+        .show()?;
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn notify() -> Result<()> {
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct TailConfig<'a> {
     pub(crate) since: DateTime<Utc>,
     pub(crate) stack_info: &'a StackInfo,
     pub(crate) nested: bool,
     pub(crate) show_separators: bool,
+    pub(crate) show_notifications: bool,
 }
 
 pub(crate) struct Tail<'a, W> {
@@ -210,6 +239,9 @@ where
                 writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
                 if self.config.show_separators {
                     self.print_separator().wrap_err("printing separator")?;
+                }
+                if self.config.show_notifications {
+                    notify().wrap_err("showing notification")?;
                 }
             } else {
                 writeln!(self.writer, "").wrap_err("printing end of event")?;
@@ -428,6 +460,7 @@ mod tests {
             stack_info: &stack_info,
             nested: false,
             show_separators: true,
+            show_notifications: true,
         };
         let mut writer = StubWriter::default();
 
