@@ -24,6 +24,7 @@ eyre = "0.6.3"
 color-eyre = "0.5.7"
 thiserror = "1.0.22"
 futures = "0.3.15"
+term_size = "0.3.2"
 
 [dev-dependencies]
 rusoto_mock = "0.45.0"

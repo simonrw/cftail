@@ -30,6 +30,7 @@ pub(crate) struct TailConfig<'a> {
     pub(crate) since: DateTime<Utc>,
     pub(crate) stack_info: &'a StackInfo,
     pub(crate) nested: bool,
+    pub(crate) show_separators: bool,
 }
 
 pub(crate) struct Tail<'a, W> {
@@ -207,11 +208,24 @@ where
                     .contains(resource_name)
             {
                 writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
+                if self.config.show_separators {
+                    self.print_separator().wrap_err("printing separator")?;
+                }
             } else {
                 writeln!(self.writer, "").wrap_err("printing end of event")?;
             }
         }
 
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self))]
+    fn print_separator(&mut self) -> Result<()> {
+        if let Some((w, _)) = term_size::dimensions() {
+            let chars = vec!['-'; w];
+            let sep: String = chars.iter().collect();
+            writeln!(self.writer, "{}", sep).wrap_err("writing to writer")?;
+        }
         Ok(())
     }
 
@@ -305,8 +319,8 @@ where
                                         };
                                         return Err(underlying).wrap_err("rusoto error");
                                     }
-                                    RusotoError::HttpDispatch(e) => {
-                                        tracing::error!(err = ?e, "http dispatch error");
+                                    RusotoError::HttpDispatch(_e) => {
+                                        // Do nothing, these are usually temporary
                                     }
                                     _ => {
                                         tracing::error!(err = ?e, "other sort of error");
@@ -413,6 +427,7 @@ mod tests {
             since: Utc.timestamp(0, 0),
             stack_info: &stack_info,
             nested: false,
+            show_separators: true,
         };
         let mut writer = StubWriter::default();
 
