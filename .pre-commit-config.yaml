@@ -10,4 +10,5 @@ repos:
     pass_filenames: false
     stages:
     - commit
+    - post-merge
     types: [rust]
