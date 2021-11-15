@@ -32,7 +32,7 @@ fn notify() -> Result<()> {
         .summary("Deploy finished")
         .body(&format!("deploy finished"))
         .appname("cftail")
-        .sound_name("Bottle")
+        .sound_name("Ping")
         .show()?;
     Ok(())
 }
