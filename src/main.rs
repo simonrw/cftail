@@ -74,6 +74,10 @@ struct Opts {
     /// Do not print stack separators
     #[structopt(long)]
     no_show_separators: bool,
+
+    // Do not show notifications
+    #[structopt(long)]
+    no_show_notifications: bool,
 }
 
 #[tokio::main]
@@ -103,6 +107,7 @@ async fn main() {
             stack_info: &stack_info,
             nested: opts.nested,
             show_separators: !opts.no_show_separators,
+            show_notifications: !opts.no_show_notifications,
         };
 
         let mut tail = Tail::new(config, Arc::new(client), &mut writer);
