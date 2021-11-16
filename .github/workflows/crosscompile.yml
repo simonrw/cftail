@@ -3,6 +3,8 @@ name: Cross compile
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -10,7 +12,7 @@ env:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
     - uses: actions/checkout@v2
@@ -18,15 +20,16 @@ jobs:
       uses: actions-rs/toolchain@v1.0.6
       with:
             toolchain: stable
-    - name: Cross compile
-      shell: bash
-      run: bash ./bin/crosscompile.sh
+    - name: Build
+      uses: actions-rs/cargo@v1.0.1
+      with:
+        command: build --release
     - name: Release
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        files: target/x86_64-apple-darwin/release/cftail
+        files: target/release/cftail
 
       
