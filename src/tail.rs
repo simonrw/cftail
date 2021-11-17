@@ -62,10 +62,19 @@ pub(crate) struct TailConfig<'a> {
     pub(crate) show_notifications: bool,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum TailMode {
+    None,
+    Prefetch,
+    Tail,
+}
+
 pub(crate) struct Tail<'a, W> {
     fetcher: Arc<CloudFormationClient>,
     writer: &'a mut W,
     config: TailConfig<'a>,
+    mode: TailMode,
+    prefetch_notified: bool,
 }
 
 impl<'a, W> Tail<'a, W>
@@ -81,6 +90,8 @@ where
             config,
             fetcher,
             writer,
+            mode: TailMode::None,
+            prefetch_notified: false,
         }
     }
 
@@ -89,6 +100,7 @@ where
     #[tracing::instrument(skip(self))]
     pub(crate) async fn prefetch(&mut self) -> Result<()> {
         tracing::debug!("prefetching events");
+        self.mode = TailMode::Prefetch;
         // fetch all of the stack events for the nested stacks
         let all_events = self
             .fetch_events(self.config.stack_info.names.iter(), self.config.since)
@@ -119,6 +131,7 @@ where
     #[tracing::instrument(skip(self))]
     pub(crate) async fn poll(&mut self) -> Result<()> {
         tracing::debug!(start_time = ?self.config.since, "showing logs from now");
+        self.mode = TailMode::Tail;
 
         loop {
             if let Err(e) = self.poll_step().await {
@@ -241,7 +254,18 @@ where
                     self.print_separator().wrap_err("printing separator")?;
                 }
                 if self.config.show_notifications {
-                    notify().wrap_err("showing notification")?;
+                    match self.mode {
+                        TailMode::Prefetch => {
+                            if !self.prefetch_notified {
+                                notify().wrap_err("showing notification")?;
+                                self.prefetch_notified = true;
+                            }
+                        }
+                        TailMode::Tail => {
+                            notify().wrap_err("showing notification")?;
+                        }
+                        _ => {}
+                    }
                 }
             } else {
                 writeln!(self.writer, "").wrap_err("printing end of event")?;
