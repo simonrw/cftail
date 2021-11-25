@@ -90,6 +90,13 @@ async fn main() {
 
     tracing::info!(stack_names = ?opts.stack_names, since = %since, nested = ?opts.nested, "tailing stack events");
 
+    if opts.stack_names.is_empty() {
+        let mut app = Opts::clap();
+        eprintln!("Error: no stacks specified");
+        app.print_help().unwrap();
+        std::process::exit(1);
+    }
+
     let mut stdout = StandardStream::stdout(ColorChoice::Auto);
     let mut writer = Writer::new(&mut stdout);
 
