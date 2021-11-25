@@ -254,17 +254,8 @@ where
                     self.print_separator().wrap_err("printing separator")?;
                 }
                 if self.config.show_notifications {
-                    match self.mode {
-                        TailMode::Prefetch => {
-                            if !self.prefetch_notified {
-                                notify().wrap_err("showing notification")?;
-                                self.prefetch_notified = true;
-                            }
-                        }
-                        TailMode::Tail => {
-                            notify().wrap_err("showing notification")?;
-                        }
-                        _ => {}
+                    if let TailMode::Tail = self.mode {
+                        notify().wrap_err("showing notification")?;
                     }
                 }
             } else {
