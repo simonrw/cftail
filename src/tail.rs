@@ -30,7 +30,7 @@ fn event_sort_key(a: &StackEvent, b: &StackEvent) -> std::cmp::Ordering {
 fn notify() -> Result<()> {
     Notification::new()
         .summary("Deploy finished")
-        .body(&format!("deploy finished"))
+        .body("deploy finished")
         .appname("cftail")
         .sound_name("Ping")
         .show()?;
@@ -115,7 +115,7 @@ where
         let mut latest_time = self.config.since;
         for e in &all_events {
             let timestamp = crate::utils::parse_event_datetime(e.timestamp.as_str())?;
-            self.print_event(&e).await.expect("printing");
+            self.print_event(e).await.expect("printing");
             tracing::trace!(latest_time = ?latest_time, timestamp = ?timestamp, "later timestamp");
             if timestamp > latest_time {
                 latest_time = timestamp;
@@ -169,7 +169,7 @@ where
         let mut latest_time = self.config.since;
         for event in &all_events {
             let timestamp = crate::utils::parse_event_datetime(event.timestamp.as_str())?;
-            self.print_event(&event).await.expect("printing");
+            self.print_event(event).await.expect("printing");
             tracing::trace!(latest_time = ?latest_time, timestamp = ?timestamp, "later timestamp");
             if timestamp > latest_time {
                 latest_time = timestamp;
@@ -241,30 +241,28 @@ where
         if let Some(reason) = status_reason {
             writeln!(self.writer, " ({reason})", reason = reason)
                 .wrap_err("printing failure reason")?;
-        } else {
-            if stack_status.is_complete()
-                && self
-                    .config
-                    .stack_info
-                    .original_names
-                    .contains(resource_name)
-            {
-                // the stack has finished deploying
-                writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
-                if let TailMode::Tail = self.mode {
-                    self.print_stack_outputs().await?;
-                }
-                if self.config.show_separators {
-                    self.print_separator().wrap_err("printing separator")?;
-                }
-                if self.config.show_notifications {
-                    if let TailMode::Tail = self.mode {
-                        notify().wrap_err("showing notification")?;
-                    }
-                }
-            } else {
-                writeln!(self.writer, "").wrap_err("printing end of event")?;
+        } else if stack_status.is_complete()
+            && self
+                .config
+                .stack_info
+                .original_names
+                .contains(resource_name)
+        {
+            // the stack has finished deploying
+            writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
+            if let TailMode::Tail = self.mode {
+                self.print_stack_outputs().await?;
             }
+            if self.config.show_separators {
+                self.print_separator().wrap_err("printing separator")?;
+            }
+            if self.config.show_notifications {
+                if let TailMode::Tail = self.mode {
+                    notify().wrap_err("showing notification")?;
+                }
+            }
+        } else {
+            writeln!(self.writer).wrap_err("printing end of event")?;
         }
 
         Ok(())
@@ -424,7 +422,7 @@ where
         for res in join_all(handles).await {
             let res = res?;
             if let Err(e) = res {
-                return Err(e.into());
+                return Err(e);
             }
         }
 

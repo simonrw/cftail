@@ -54,5 +54,5 @@ pub(crate) async fn fetch_stack_resources(
         .await
         .unwrap();
     res.stack_resources
-        .ok_or(eyre::eyre!("no stack resources found"))
+        .ok_or_else(|| eyre::eyre!("no stack resources found"))
 }

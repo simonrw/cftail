@@ -107,15 +107,14 @@ impl StackStatus {
     }
 
     pub(crate) fn is_complete(&self) -> bool {
-        match self {
+        matches!(self,
             Self::CreateComplete
-            | Self::DeleteComplete
-            | Self::RollbackComplete
-            | Self::UpdateComplete
-            | Self::UpdateRollbackComplete
-            | Self::ImportComplete
-            | Self::ImportRollbackComplete => true,
-            _ => false,
-        }
+                | Self::DeleteComplete
+                | Self::RollbackComplete
+                | Self::UpdateComplete
+                | Self::UpdateRollbackComplete
+                | Self::ImportComplete
+                | Self::ImportRollbackComplete
+        )
     }
 }

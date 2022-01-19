@@ -86,7 +86,7 @@ async fn main() {
     color_eyre::install().unwrap();
 
     let opts = Opts::from_args();
-    let since = opts.since.unwrap_or_else(|| Utc::now());
+    let since = opts.since.unwrap_or_else(Utc::now);
 
     tracing::info!(stack_names = ?opts.stack_names, since = %since, nested = ?opts.nested, "tailing stack events");
 
