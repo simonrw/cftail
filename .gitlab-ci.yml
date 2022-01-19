@@ -47,12 +47,3 @@ build_linux:
   artifacts:
      paths:
        - target/x86_64-unknown-linux-gnu/release/cftail
-
-build_macos:
-  stage: build_binaries
-  <<: *caching_rust
-  script:
-    - bash ./bin/crosscompile.sh
-  artifacts:
-    paths:
-      - target/x86_64-apple-darwin/release/cftail
