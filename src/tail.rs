@@ -3,7 +3,7 @@ use eyre::{Result, WrapErr};
 use futures::future::join_all;
 use notify_rust::Notification;
 use rusoto_cloudformation::{
-    CloudFormation, CloudFormationClient, DescribeStackEventsInput, StackEvent,
+    CloudFormation, CloudFormationClient, DescribeStackEventsInput, DescribeStacksInput, StackEvent,
 };
 use rusoto_core::RusotoError;
 use std::convert::TryFrom;
@@ -115,7 +115,7 @@ where
         let mut latest_time = self.config.since;
         for e in &all_events {
             let timestamp = crate::utils::parse_event_datetime(e.timestamp.as_str())?;
-            self.print_event(&e).expect("printing");
+            self.print_event(&e).await.expect("printing");
             tracing::trace!(latest_time = ?latest_time, timestamp = ?timestamp, "later timestamp");
             if timestamp > latest_time {
                 latest_time = timestamp;
@@ -169,7 +169,7 @@ where
         let mut latest_time = self.config.since;
         for event in &all_events {
             let timestamp = crate::utils::parse_event_datetime(event.timestamp.as_str())?;
-            self.print_event(&event).expect("printing");
+            self.print_event(&event).await.expect("printing");
             tracing::trace!(latest_time = ?latest_time, timestamp = ?timestamp, "later timestamp");
             if timestamp > latest_time {
                 latest_time = timestamp;
@@ -185,7 +185,7 @@ where
     }
 
     #[tracing::instrument(skip(self, event))]
-    fn print_event(&mut self, event: &rusoto_cloudformation::StackEvent) -> Result<()> {
+    async fn print_event(&mut self, event: &rusoto_cloudformation::StackEvent) -> Result<()> {
         let resource_name = event
             .logical_resource_id
             .as_ref()
@@ -249,7 +249,11 @@ where
                     .original_names
                     .contains(resource_name)
             {
+                // the stack has finished deploying
                 writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
+                if let TailMode::Tail = self.mode {
+                    self.print_stack_outputs().await?;
+                }
                 if self.config.show_separators {
                     self.print_separator().wrap_err("printing separator")?;
                 }
@@ -263,6 +267,35 @@ where
             }
         }
 
+        Ok(())
+    }
+
+    // get the list of stack outputs that have been deployed and print to the output
+    #[tracing::instrument(skip(self))]
+    async fn print_stack_outputs(&mut self) -> Result<()> {
+        tracing::info!("printing stack outputs");
+        let input = DescribeStacksInput {
+            stack_name: Some("cftail-test-stack".to_string()),
+            ..Default::default()
+        };
+        let res = self.fetcher.describe_stacks(input).await.unwrap();
+        match res.stacks {
+            Some(stacks) => {
+                if stacks.len() != 1 {
+                    unreachable!();
+                }
+
+                let outputs = stacks[0].outputs.as_ref().unwrap();
+                writeln!(self.writer, "\nOutputs:").unwrap();
+                for output in outputs {
+                    let name = output.output_key.as_ref().unwrap();
+                    let value = output.output_value.as_ref().unwrap();
+                    writeln!(self.writer, "- {}: {}", name, value).unwrap();
+                }
+                writeln!(self.writer).unwrap();
+            }
+            None => unreachable!(),
+        }
         Ok(())
     }
 
