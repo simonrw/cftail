@@ -251,7 +251,7 @@ where
             // the stack has finished deploying
             writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
             if let TailMode::Tail = self.mode {
-                self.print_stack_outputs().await?;
+                self.print_stack_outputs(&event.stack_name).await?;
             }
             if self.config.show_separators {
                 self.print_separator().wrap_err("printing separator")?;
@@ -270,10 +270,10 @@ where
 
     // get the list of stack outputs that have been deployed and print to the output
     #[tracing::instrument(skip(self))]
-    async fn print_stack_outputs(&mut self) -> Result<()> {
+    async fn print_stack_outputs(&mut self, stack_name: &str) -> Result<()> {
         tracing::info!("printing stack outputs");
         let input = DescribeStacksInput {
-            stack_name: Some("cftail-test-stack".to_string()),
+            stack_name: Some(stack_name.to_string()),
             ..Default::default()
         };
         let res = self.fetcher.describe_stacks(input).await.unwrap();
