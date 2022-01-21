@@ -276,33 +276,27 @@ where
             ..Default::default()
         };
         let res = self.fetcher.describe_stacks(input).await.unwrap();
-        match res.stacks {
-            Some(stacks) => {
-                if stacks.len() != 1 {
-                    unreachable!(
-                        "unexpected number of stacks, found {}, expected 1",
-                        stacks.len()
-                    );
-                }
+        let stacks = res.stacks;
+        if stacks.len() != 1 {
+            unreachable!(
+                "unexpected number of stacks, found {}, expected 1",
+                stacks.len()
+            );
+        }
 
-                if let Some(outputs) = stacks[0].outputs.as_ref() {
-                    writeln!(self.writer, "\nOutputs:").unwrap();
+        if let Some(outputs) = stacks[0].outputs.as_ref() {
+            writeln!(self.writer, "\nOutputs:").unwrap();
 
-                    let mut table = Table::new();
-                    table.style = TableStyle::thin();
-                    table.add_row(Row::new(vec!["Name", "Value"]));
+            let mut table = Table::new();
+            table.style = TableStyle::thin();
+            table.add_row(Row::new(vec!["Name", "Value"]));
 
-                    for output in outputs {
-                        let name = output.output_key.as_ref().unwrap();
-                        let value = output.output_value.as_ref().unwrap();
-                        table.add_row(Row::new(vec![name, value]));
-                    }
-                    writeln!(self.writer, "{}", table.render()).unwrap();
-                } else {
-                    tracing::debug!("no outputs found");
-                }
+            for output in outputs {
+                table.add_row(Row::new(vec![&output.key, &output.value]));
             }
-            None => unreachable!(),
+            writeln!(self.writer, "{}", table.render()).unwrap();
+        } else {
+            tracing::debug!("no outputs found");
         }
         Ok(())
     }
