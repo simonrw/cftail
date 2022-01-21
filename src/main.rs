@@ -116,7 +116,6 @@ async fn main() {
         let config = TailConfig {
             since,
             stack_info: &stack_info,
-            nested: opts.nested,
             show_separators: !opts.no_show_separators,
             show_notifications: !opts.no_show_notifications,
             show_outputs: !opts.no_show_outputs,

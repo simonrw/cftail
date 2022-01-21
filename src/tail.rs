@@ -57,7 +57,6 @@ fn notify() -> Result<()> {
 pub(crate) struct TailConfig<'a> {
     pub(crate) since: DateTime<Utc>,
     pub(crate) stack_info: &'a StackInfo,
-    pub(crate) nested: bool,
     pub(crate) show_separators: bool,
     pub(crate) show_notifications: bool,
     pub(crate) show_outputs: bool,
@@ -75,7 +74,6 @@ pub(crate) struct Tail<'a, W> {
     writer: &'a mut W,
     config: TailConfig<'a>,
     mode: TailMode,
-    prefetch_notified: bool,
 }
 
 impl<'a, W> Tail<'a, W>
@@ -92,7 +90,6 @@ where
             fetcher,
             writer,
             mode: TailMode::None,
-            prefetch_notified: false,
         }
     }
 
@@ -518,7 +515,6 @@ mod tests {
         let config = TailConfig {
             since: Utc.timestamp(0, 0),
             stack_info: &stack_info,
-            nested: false,
             show_separators: true,
             show_notifications: true,
             show_outputs: true,
