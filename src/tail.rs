@@ -60,6 +60,7 @@ pub(crate) struct TailConfig<'a> {
     pub(crate) nested: bool,
     pub(crate) show_separators: bool,
     pub(crate) show_notifications: bool,
+    pub(crate) show_outputs: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -251,7 +252,9 @@ where
             // the stack has finished deploying
             writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
             if let TailMode::Tail = self.mode {
-                self.print_stack_outputs(&event.stack_name).await?;
+                if self.config.show_outputs {
+                    self.print_stack_outputs(&event.stack_name).await?;
+                }
             }
             if self.config.show_separators {
                 self.print_separator().wrap_err("printing separator")?;
@@ -518,6 +521,7 @@ mod tests {
             nested: false,
             show_separators: true,
             show_notifications: true,
+            show_outputs: true,
         };
         let mut writer = StubWriter::default();
 
