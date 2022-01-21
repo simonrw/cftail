@@ -11,6 +11,7 @@ use std::fmt::Debug;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use term_table::{row::Row, Table, TableStyle};
 use termcolor::{Color, ColorSpec, WriteColor};
 use tokio::sync::mpsc;
 use tokio::time::delay_for;
@@ -57,9 +58,9 @@ fn notify() -> Result<()> {
 pub(crate) struct TailConfig<'a> {
     pub(crate) since: DateTime<Utc>,
     pub(crate) stack_info: &'a StackInfo,
-    pub(crate) nested: bool,
     pub(crate) show_separators: bool,
     pub(crate) show_notifications: bool,
+    pub(crate) show_outputs: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -74,7 +75,6 @@ pub(crate) struct Tail<'a, W> {
     writer: &'a mut W,
     config: TailConfig<'a>,
     mode: TailMode,
-    prefetch_notified: bool,
 }
 
 impl<'a, W> Tail<'a, W>
@@ -91,7 +91,6 @@ where
             fetcher,
             writer,
             mode: TailMode::None,
-            prefetch_notified: false,
         }
     }
 
@@ -250,9 +249,11 @@ where
         {
             // the stack has finished deploying
             writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
-            if let TailMode::Tail = self.mode {
+            // if let TailMode::Tail = self.mode {
+            if self.config.show_outputs {
                 self.print_stack_outputs(&event.stack_name).await?;
             }
+            // }
             if self.config.show_separators {
                 self.print_separator().wrap_err("printing separator")?;
             }
@@ -271,7 +272,7 @@ where
     // get the list of stack outputs that have been deployed and print to the output
     #[tracing::instrument(skip(self))]
     async fn print_stack_outputs(&mut self, stack_name: &str) -> Result<()> {
-        tracing::info!("printing stack outputs");
+        tracing::info!(%stack_name, "printing stack outputs");
         let input = DescribeStacksInput {
             stack_name: Some(stack_name.to_string()),
             ..Default::default()
@@ -288,12 +289,19 @@ where
 
                 if let Some(outputs) = stacks[0].outputs.as_ref() {
                     writeln!(self.writer, "\nOutputs:").unwrap();
+
+                    let mut table = Table::new();
+                    table.style = TableStyle::thin();
+                    table.add_row(Row::new(vec!["Name", "Value"]));
+
                     for output in outputs {
                         let name = output.output_key.as_ref().unwrap();
                         let value = output.output_value.as_ref().unwrap();
-                        writeln!(self.writer, "- {}: {}", name, value).unwrap();
+                        table.add_row(Row::new(vec![name, value]));
                     }
-                    writeln!(self.writer).unwrap();
+                    writeln!(self.writer, "{}", table.render()).unwrap();
+                } else {
+                    tracing::debug!("no outputs found");
                 }
             }
             None => unreachable!(),
@@ -508,9 +516,9 @@ mod tests {
         let config = TailConfig {
             since: Utc.timestamp(0, 0),
             stack_info: &stack_info,
-            nested: false,
             show_separators: true,
             show_notifications: true,
+            show_outputs: true,
         };
         let mut writer = StubWriter::default();
 
