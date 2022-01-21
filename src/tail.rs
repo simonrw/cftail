@@ -280,17 +280,21 @@ where
         match res.stacks {
             Some(stacks) => {
                 if stacks.len() != 1 {
-                    unreachable!();
+                    unreachable!(
+                        "unexpected number of stacks, found {}, expected 1",
+                        stacks.len()
+                    );
                 }
 
-                let outputs = stacks[0].outputs.as_ref().unwrap();
-                writeln!(self.writer, "\nOutputs:").unwrap();
-                for output in outputs {
-                    let name = output.output_key.as_ref().unwrap();
-                    let value = output.output_value.as_ref().unwrap();
-                    writeln!(self.writer, "- {}: {}", name, value).unwrap();
+                if let Some(outputs) = stacks[0].outputs.as_ref() {
+                    writeln!(self.writer, "\nOutputs:").unwrap();
+                    for output in outputs {
+                        let name = output.output_key.as_ref().unwrap();
+                        let value = output.output_value.as_ref().unwrap();
+                        writeln!(self.writer, "- {}: {}", name, value).unwrap();
+                    }
+                    writeln!(self.writer).unwrap();
                 }
-                writeln!(self.writer).unwrap();
             }
             None => unreachable!(),
         }
