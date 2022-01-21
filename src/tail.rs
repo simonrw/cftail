@@ -271,7 +271,7 @@ where
     // get the list of stack outputs that have been deployed and print to the output
     #[tracing::instrument(skip(self))]
     async fn print_stack_outputs(&mut self, stack_name: &str) -> Result<()> {
-        tracing::info!("printing stack outputs");
+        tracing::info!(%stack_name, "printing stack outputs");
         let input = DescribeStacksInput {
             stack_name: Some(stack_name.to_string()),
             ..Default::default()
