@@ -10,8 +10,8 @@ license = "Apache-2.0"
 [dependencies]
 async-trait = "0.1.41"
 chrono = "0.4.19"
-rusoto_cloudformation = "0.45.0"
-rusoto_core = "0.45.0"
+rusoto_cloudformation = { version = "0.45.0", optional = true }
+rusoto_core = { version = "0.45.0", optional = true }
 serde = {version = "1.0.117", features = ["derive"]}
 serde-xml-rs = "0.4.0"
 structopt = "0.3.20"
@@ -32,6 +32,10 @@ term-table = "1.3.2"
 rusoto_mock = "0.45.0"
 env_logger = "*"
 log = "*"
+
+[features]
+default = ["rusoto"]
+rusoto = ["rusoto_core", "rusoto_cloudformation"]
 
 [profile.release]
 opt-level = "z"
