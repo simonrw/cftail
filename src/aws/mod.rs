@@ -1,8 +1,4 @@
-use rusoto_core::RusotoError;
-
 mod rusoto;
-
-pub(crate) type AwsResult<T, E> = Result<T, RusotoError<E>>;
 
 /// Trait representing interactions with CloudFormation
 #[async_trait::async_trait]
@@ -10,13 +6,19 @@ pub(crate) trait AwsCloudFormationClient {
     async fn describe_stacks(
         &self,
         input: DescribeStacksInput,
-    ) -> AwsResult<DescribeStacksOutput, rusoto_cloudformation::DescribeStacksError>;
+    ) -> Result<DescribeStacksOutput, DescribeStacksError>;
 
     async fn describe_stack_events(
         &self,
         input: DescribeStackEventsInput,
-    ) -> AwsResult<DescribeStackEventsOutput, rusoto_cloudformation::DescribeStackEventsError>;
+    ) -> Result<DescribeStackEventsOutput, DescribeStackEventsError>;
 }
+
+#[derive(Debug)]
+pub(crate) struct DescribeStacksError {}
+
+#[derive(Debug)]
+pub(crate) struct DescribeStackEventsError {}
 
 #[derive(Default)]
 pub(crate) struct DescribeStacksInput {

@@ -1,10 +1,9 @@
 use super::{
-    AwsCloudFormationClient, DescribeStackEventsInput, DescribeStackEventsOutput,
-    DescribeStacksInput, DescribeStacksOutput, Output, Stack, StackEvent,
+    AwsCloudFormationClient, DescribeStackEventsError, DescribeStackEventsInput,
+    DescribeStackEventsOutput, DescribeStacksError, DescribeStacksInput, DescribeStacksOutput,
+    Output, Stack, StackEvent,
 };
-use rusoto_cloudformation::{
-    CloudFormation, CloudFormationClient, DescribeStackEventsError, DescribeStacksError,
-};
+use rusoto_cloudformation::{CloudFormation, CloudFormationClient};
 use rusoto_core::RusotoError;
 
 pub(crate) type AwsResult<T, E> = Result<T, RusotoError<E>>;
@@ -14,23 +13,41 @@ impl AwsCloudFormationClient for CloudFormationClient {
     async fn describe_stacks(
         &self,
         input: DescribeStacksInput,
-    ) -> AwsResult<DescribeStacksOutput, DescribeStacksError> {
+    ) -> Result<DescribeStacksOutput, DescribeStacksError> {
         CloudFormation::describe_stacks(self, input.into())
             .await
             .map(From::from)
+            .map_err(From::from)
     }
 
     async fn describe_stack_events(
         &self,
         input: DescribeStackEventsInput,
-    ) -> AwsResult<DescribeStackEventsOutput, DescribeStackEventsError> {
+    ) -> Result<DescribeStackEventsOutput, DescribeStackEventsError> {
         CloudFormation::describe_stack_events(self, input.into())
             .await
             .map(From::from)
+            .map_err(From::from)
     }
 }
 
 // conversions to and from third party types
+
+impl From<rusoto_core::RusotoError<rusoto_cloudformation::DescribeStacksError>>
+    for DescribeStacksError
+{
+    fn from(_: rusoto_core::RusotoError<rusoto_cloudformation::DescribeStacksError>) -> Self {
+        todo!()
+    }
+}
+
+impl From<rusoto_core::RusotoError<rusoto_cloudformation::DescribeStackEventsError>>
+    for DescribeStackEventsError
+{
+    fn from(_: rusoto_core::RusotoError<rusoto_cloudformation::DescribeStackEventsError>) -> Self {
+        todo!()
+    }
+}
 
 impl From<DescribeStacksInput> for rusoto_cloudformation::DescribeStacksInput {
     fn from(i: DescribeStacksInput) -> Self {
