@@ -42,8 +42,12 @@ build_linux:
   <<: *caching_rust
   before_script:
     - rustup target add x86_64-unknown-linux-gnu
+  variables:
+    CARGO_PROFILE_RELEASE_LTO: "true"
+    CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
   script:
     - cargo build --release --target x86_64-unknown-linux-gnu
+    - strip target/x86_64-unknown-linux-gnu/release/cftail
   artifacts:
      paths:
        - target/x86_64-unknown-linux-gnu/release/cftail

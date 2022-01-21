@@ -34,6 +34,4 @@ env_logger = "*"
 log = "*"
 
 [profile.release]
-debug = true
-
-[features]
+opt-level = "z"
