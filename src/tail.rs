@@ -1,9 +1,8 @@
-use crate::aws::DescribeStacksInput;
+use crate::aws::{DescribeStackEventsInput, DescribeStacksInput, StackEvent};
 use chrono::{DateTime, Utc};
 use eyre::{Result, WrapErr};
 use futures::future::join_all;
 use notify_rust::Notification;
-use rusoto_cloudformation::{DescribeStackEventsInput, StackEvent};
 use rusoto_core::RusotoError;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -183,7 +182,7 @@ where
     }
 
     #[tracing::instrument(skip(self, event))]
-    async fn print_event(&mut self, event: &rusoto_cloudformation::StackEvent) -> Result<()> {
+    async fn print_event(&mut self, event: &StackEvent) -> Result<()> {
         let resource_name = event
             .logical_resource_id
             .as_ref()
@@ -346,27 +345,19 @@ where
                         match res {
                             Ok(response) => {
                                 tracing::debug!("got successful response");
-                                match response.stack_events {
-                                    Some(batch) => {
-                                        for event in batch {
-                                            let timestamp = crate::utils::parse_event_datetime(
-                                                event.timestamp.as_str(),
-                                            )?;
+                                for event in response.stack_events {
+                                    let timestamp = crate::utils::parse_event_datetime(
+                                        event.timestamp.as_str(),
+                                    )?;
 
-                                            // We know that the events are in reverse chronological
-                                            // order, so if we witness an event with a timestamp
-                                            // that's earlier than what we have already seen, then
-                                            // we know that it has already been presented.
-                                            if timestamp <= since {
-                                                break 'poll;
-                                            }
-                                            all_events.push(event);
-                                        }
+                                    // We know that the events are in reverse chronological
+                                    // order, so if we witness an event with a timestamp
+                                    // that's earlier than what we have already seen, then
+                                    // we know that it has already been presented.
+                                    if timestamp <= since {
+                                        break 'poll;
                                     }
-                                    None => {
-                                        tracing::debug!("reached end of events");
-                                        break;
-                                    }
+                                    all_events.push(event);
                                 }
 
                                 match response.next_token {
@@ -415,9 +406,7 @@ where
                         };
                     }
 
-                    tx.send(all_events)
-                        .await
-                        .wrap_err("error sending events over channel")?;
+                    let _ = tx.send(all_events).await;
 
                     Ok::<(), eyre::Error>(())
                 })
