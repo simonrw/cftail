@@ -26,6 +26,7 @@ thiserror = "1.0.22"
 futures = "0.3.15"
 term_size = "0.3.2"
 notify-rust = "4.5.5"
+comfy-table = "5.0.0"
 
 [dev-dependencies]
 rusoto_mock = "0.45.0"

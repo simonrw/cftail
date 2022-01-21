@@ -288,12 +288,19 @@ where
 
                 if let Some(outputs) = stacks[0].outputs.as_ref() {
                     writeln!(self.writer, "\nOutputs:").unwrap();
+
+                    let mut table = comfy_table::Table::new();
+                    table.load_preset(comfy_table::presets::UTF8_FULL);
+                    table.set_header(vec!["Name", "Value"]);
+
                     for output in outputs {
                         let name = output.output_key.as_ref().unwrap();
                         let value = output.output_value.as_ref().unwrap();
-                        writeln!(self.writer, "- {}: {}", name, value).unwrap();
+                        table.add_row(vec![name, value]);
                     }
-                    writeln!(self.writer).unwrap();
+                    writeln!(self.writer, "{}", table).unwrap();
+                } else {
+                    tracing::debug!("no outputs found");
                 }
             }
             None => unreachable!(),
