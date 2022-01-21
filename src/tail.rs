@@ -2,9 +2,7 @@ use chrono::{DateTime, Utc};
 use eyre::{Result, WrapErr};
 use futures::future::join_all;
 use notify_rust::Notification;
-use rusoto_cloudformation::{
-    CloudFormation, CloudFormationClient, DescribeStackEventsInput, DescribeStacksInput, StackEvent,
-};
+use rusoto_cloudformation::{DescribeStackEventsInput, DescribeStacksInput, StackEvent};
 use rusoto_core::RusotoError;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -71,7 +69,7 @@ enum TailMode {
 }
 
 pub(crate) struct Tail<'a, W> {
-    fetcher: Arc<CloudFormationClient>,
+    fetcher: Arc<dyn crate::aws::AwsCloudFormationClient + Sync + Send>,
     writer: &'a mut W,
     config: TailConfig<'a>,
     mode: TailMode,
@@ -83,7 +81,7 @@ where
 {
     pub(crate) fn new(
         config: TailConfig<'a>,
-        fetcher: Arc<CloudFormationClient>,
+        fetcher: Arc<dyn crate::aws::AwsCloudFormationClient + Sync + Send>,
         writer: &'a mut W,
     ) -> Self {
         Self {
@@ -456,6 +454,7 @@ where
 mod tests {
     use super::*;
     use chrono::TimeZone;
+    use rusoto_cloudformation::CloudFormationClient;
     use rusoto_mock::{
         MockCredentialsProvider, MockRequestDispatcher, MockResponseReader, ReadMockResponse,
     };

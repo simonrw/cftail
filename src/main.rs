@@ -9,6 +9,7 @@ use structopt::StructOpt;
 use termcolor::{ColorChoice, StandardStream};
 use tokio::time::delay_for;
 
+mod aws;
 mod error;
 mod nested_stacks;
 mod stack_status;
