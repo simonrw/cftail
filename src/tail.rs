@@ -11,6 +11,7 @@ use std::fmt::Debug;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use term_table::{row::Row, Table, TableStyle};
 use termcolor::{Color, ColorSpec, WriteColor};
 use tokio::sync::mpsc;
 use tokio::time::delay_for;
@@ -248,11 +249,11 @@ where
         {
             // the stack has finished deploying
             writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
-            if let TailMode::Tail = self.mode {
-                if self.config.show_outputs {
-                    self.print_stack_outputs(&event.stack_name).await?;
-                }
+            // if let TailMode::Tail = self.mode {
+            if self.config.show_outputs {
+                self.print_stack_outputs(&event.stack_name).await?;
             }
+            // }
             if self.config.show_separators {
                 self.print_separator().wrap_err("printing separator")?;
             }
@@ -289,16 +290,16 @@ where
                 if let Some(outputs) = stacks[0].outputs.as_ref() {
                     writeln!(self.writer, "\nOutputs:").unwrap();
 
-                    let mut table = comfy_table::Table::new();
-                    table.load_preset(comfy_table::presets::UTF8_FULL);
-                    table.set_header(vec!["Name", "Value"]);
+                    let mut table = Table::new();
+                    table.style = TableStyle::thin();
+                    table.add_row(Row::new(vec!["Name", "Value"]));
 
                     for output in outputs {
                         let name = output.output_key.as_ref().unwrap();
                         let value = output.output_value.as_ref().unwrap();
-                        table.add_row(vec![name, value]);
+                        table.add_row(Row::new(vec![name, value]));
                     }
-                    writeln!(self.writer, "{}", table).unwrap();
+                    writeln!(self.writer, "{}", table.render()).unwrap();
                 } else {
                     tracing::debug!("no outputs found");
                 }
