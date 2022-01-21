@@ -1,8 +1,9 @@
+use crate::aws::DescribeStacksInput;
 use chrono::{DateTime, Utc};
 use eyre::{Result, WrapErr};
 use futures::future::join_all;
 use notify_rust::Notification;
-use rusoto_cloudformation::{DescribeStackEventsInput, DescribeStacksInput, StackEvent};
+use rusoto_cloudformation::{DescribeStackEventsInput, StackEvent};
 use rusoto_core::RusotoError;
 use std::convert::TryFrom;
 use std::fmt::Debug;

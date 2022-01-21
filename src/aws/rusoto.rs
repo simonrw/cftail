@@ -1,7 +1,7 @@
-use super::{AwsCloudFormationClient, DescribeStacksOutput, Output, Stack};
+use super::{AwsCloudFormationClient, DescribeStacksInput, DescribeStacksOutput, Output, Stack};
 use rusoto_cloudformation::{
     CloudFormation, CloudFormationClient, DescribeStackEventsError, DescribeStackEventsInput,
-    DescribeStackEventsOutput, DescribeStacksError, DescribeStacksInput,
+    DescribeStackEventsOutput, DescribeStacksError,
 };
 use rusoto_core::RusotoError;
 
@@ -13,7 +13,7 @@ impl AwsCloudFormationClient for CloudFormationClient {
         &self,
         input: DescribeStacksInput,
     ) -> AwsResult<DescribeStacksOutput, DescribeStacksError> {
-        CloudFormation::describe_stacks(self, input)
+        CloudFormation::describe_stacks(self, input.into())
             .await
             .map(From::from)
     }
@@ -26,7 +26,17 @@ impl AwsCloudFormationClient for CloudFormationClient {
     }
 }
 
-// wrapper around third party types
+// conversions to and from third party types
+
+impl From<DescribeStacksInput> for rusoto_cloudformation::DescribeStacksInput {
+    fn from(i: DescribeStacksInput) -> Self {
+        Self {
+            stack_name: i.stack_name.clone(),
+            next_token: i.next_token.clone(),
+        }
+    }
+}
+
 impl From<&rusoto_cloudformation::Output> for Output {
     fn from(o: &rusoto_cloudformation::Output) -> Self {
         Self {
