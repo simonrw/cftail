@@ -32,7 +32,8 @@ impl AwsCloudFormationClient for Client {
         &self,
         input: DescribeStackResourcesInput,
     ) -> Result<DescribeStackResourcesOutput, DescribeStackResourcesError> {
-        todo!()
+        let builder = Client::describe_stack_resources(self).stack_name(input.stack_name);
+        builder.send().await.map(From::from).map_err(From::from)
     }
 }
 
@@ -95,6 +96,31 @@ impl From<&aws_sdk_cloudformation::model::Output> for Output {
     }
 }
 
+impl From<aws_sdk_cloudformation::output::DescribeStackResourcesOutput>
+    for DescribeStackResourcesOutput
+{
+    fn from(o: aws_sdk_cloudformation::output::DescribeStackResourcesOutput) -> Self {
+        Self {
+            stack_resources: o
+                .stack_resources
+                .unwrap_or_else(Vec::new)
+                .iter()
+                .map(From::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<&aws_sdk_cloudformation::model::StackResource> for StackResource {
+    fn from(r: &aws_sdk_cloudformation::model::StackResource) -> Self {
+        Self {
+            resource_type: r.resource_type.as_ref().unwrap().to_string(),
+            physical_resource_id: r.physical_resource_id.clone(),
+            stack_name: r.stack_name.as_ref().unwrap().to_string(),
+        }
+    }
+}
+
 impl From<aws_sdk_cloudformation::SdkError<aws_sdk_cloudformation::error::DescribeStackEventsError>>
     for DescribeStackEventsError
 {
@@ -106,11 +132,28 @@ impl From<aws_sdk_cloudformation::SdkError<aws_sdk_cloudformation::error::Descri
         todo!()
     }
 }
+
 impl From<aws_sdk_cloudformation::SdkError<aws_sdk_cloudformation::error::DescribeStacksError>>
     for DescribeStacksError
 {
     fn from(
         _: aws_sdk_cloudformation::SdkError<aws_sdk_cloudformation::error::DescribeStacksError>,
+    ) -> Self {
+        todo!()
+    }
+}
+
+impl
+    From<
+        aws_sdk_cloudformation::SdkError<
+            aws_sdk_cloudformation::error::DescribeStackResourcesError,
+        >,
+    > for DescribeStackResourcesError
+{
+    fn from(
+        _: aws_sdk_cloudformation::SdkError<
+            aws_sdk_cloudformation::error::DescribeStackResourcesError,
+        >,
     ) -> Self {
         todo!()
     }
