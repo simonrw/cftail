@@ -18,6 +18,8 @@ pub(crate) enum Error {
     ErrorResponse(ErrorResponse),
     #[error("other error {0}")]
     Other(String),
+    #[error("aws client error")]
+    Client,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]

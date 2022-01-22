@@ -23,13 +23,20 @@ pub(crate) trait AwsCloudFormationClient {
 }
 
 #[derive(Debug)]
-pub(crate) struct DescribeStacksError {}
+pub(crate) enum DescribeStacksError {}
 
 #[derive(Debug)]
-pub(crate) struct DescribeStackEventsError {}
+#[non_exhaustive]
+pub(crate) enum DescribeStackEventsError {
+    Timeout,
+    Dispatch,
+    Response,
+    Service,
+    Other,
+}
 
 #[derive(Debug)]
-pub(crate) struct DescribeStackResourcesError {}
+pub(crate) enum DescribeStackResourcesError {}
 
 // DescribeStacks
 

@@ -125,11 +125,25 @@ impl From<aws_sdk_cloudformation::SdkError<aws_sdk_cloudformation::error::Descri
     for DescribeStackEventsError
 {
     fn from(
-        _: aws_sdk_cloudformation::SdkError<
+        e: aws_sdk_cloudformation::SdkError<
             aws_sdk_cloudformation::error::DescribeStackEventsError,
         >,
     ) -> Self {
-        todo!()
+        match e {
+            aws_sdk_cloudformation::SdkError::ConstructionFailure(_) => {
+                DescribeStackEventsError::Other
+            }
+            aws_sdk_cloudformation::SdkError::TimeoutError(_) => DescribeStackEventsError::Timeout,
+            aws_sdk_cloudformation::SdkError::DispatchFailure(_) => {
+                DescribeStackEventsError::Dispatch
+            }
+            aws_sdk_cloudformation::SdkError::ResponseError { .. } => {
+                DescribeStackEventsError::Response
+            }
+            aws_sdk_cloudformation::SdkError::ServiceError { .. } => {
+                DescribeStackEventsError::Service
+            }
+        }
     }
 }
 
@@ -137,9 +151,15 @@ impl From<aws_sdk_cloudformation::SdkError<aws_sdk_cloudformation::error::Descri
     for DescribeStacksError
 {
     fn from(
-        _: aws_sdk_cloudformation::SdkError<aws_sdk_cloudformation::error::DescribeStacksError>,
+        e: aws_sdk_cloudformation::SdkError<aws_sdk_cloudformation::error::DescribeStacksError>,
     ) -> Self {
-        todo!()
+        match e {
+            aws_sdk_cloudformation::SdkError::ConstructionFailure(_) => todo!(),
+            aws_sdk_cloudformation::SdkError::TimeoutError(_) => todo!(),
+            aws_sdk_cloudformation::SdkError::DispatchFailure(_) => todo!(),
+            aws_sdk_cloudformation::SdkError::ResponseError { err, raw } => todo!(),
+            aws_sdk_cloudformation::SdkError::ServiceError { err, raw } => todo!(),
+        }
     }
 }
 
@@ -151,10 +171,16 @@ impl
     > for DescribeStackResourcesError
 {
     fn from(
-        _: aws_sdk_cloudformation::SdkError<
+        e: aws_sdk_cloudformation::SdkError<
             aws_sdk_cloudformation::error::DescribeStackResourcesError,
         >,
     ) -> Self {
-        todo!()
+        match e {
+            aws_sdk_cloudformation::SdkError::ConstructionFailure(_) => todo!(),
+            aws_sdk_cloudformation::SdkError::TimeoutError(_) => todo!(),
+            aws_sdk_cloudformation::SdkError::DispatchFailure(_) => todo!(),
+            aws_sdk_cloudformation::SdkError::ResponseError { err, raw } => todo!(),
+            aws_sdk_cloudformation::SdkError::ServiceError { err, raw } => todo!(),
+        }
     }
 }
