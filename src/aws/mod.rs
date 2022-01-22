@@ -1,3 +1,6 @@
+#[cfg(feature = "aws-sdk")]
+mod aws_sdk;
+#[cfg(feature = "rusoto")]
 mod rusoto;
 
 /// Trait representing interactions with CloudFormation

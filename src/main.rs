@@ -1,15 +1,19 @@
 use chrono::{prelude::*, Duration as ChronoDuration};
 use eyre::{Result, WrapErr};
-#[cfg(feature = "rusoto")]
-use rusoto_cloudformation::CloudFormationClient;
-#[cfg(feature = "rusoto")]
-use rusoto_core::Region;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use structopt::StructOpt;
 use termcolor::{ColorChoice, StandardStream};
-use tokio::time::delay_for;
+use tokio::time::sleep;
+
+#[cfg(feature = "rusoto")]
+use rusoto_cloudformation::CloudFormationClient;
+#[cfg(feature = "rusoto")]
+use rusoto_core::Region;
+
+#[cfg(feature = "aws-sdk")]
+use aws_sdk_cloudformation::Client;
 
 mod aws;
 mod error;
@@ -88,11 +92,17 @@ struct Opts {
 }
 
 #[cfg(feature = "rusoto")]
-fn create_client() -> CloudFormationClient {
+async fn create_client() -> CloudFormationClient {
     let region = Region::default();
     tracing::debug!(region = ?region, "chosen region");
 
     CloudFormationClient::new(region)
+}
+
+#[cfg(feature = "aws-sdk")]
+async fn create_client() -> aws_sdk_cloudformation::Client {
+    let config = aws_config::load_from_env().await;
+    Client::new(&config)
 }
 
 #[tokio::main]
@@ -116,7 +126,7 @@ async fn main() {
     let mut writer = Writer::new(&mut stdout);
 
     loop {
-        let client = create_client();
+        let client = create_client().await;
         let stack_info = build_stack_list(&client, &opts.stack_names, opts.nested)
             .await
             .expect("building stack list");
@@ -149,7 +159,7 @@ async fn main() {
                 }
                 Some(Error::RateLimitExceeded) => {
                     tracing::warn!("rate limit exceeded");
-                    delay_for(Duration::from_secs(5)).await;
+                    sleep(Duration::from_secs(5)).await;
                 }
                 Some(e) => {
                     eprintln!("Error: unknown error: {:?}", e);
@@ -172,7 +182,7 @@ async fn main() {
                 }
                 Some(Error::RateLimitExceeded) => {
                     tracing::warn!("rate limit exceeded");
-                    delay_for(Duration::from_secs(5)).await;
+                    sleep(Duration::from_secs(5)).await;
                 }
                 Some(Error::NoStack(name)) => {
                     eprintln!("could not find stack {}", name);

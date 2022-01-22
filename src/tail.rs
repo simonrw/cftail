@@ -10,7 +10,7 @@ use std::time::Duration;
 use term_table::{row::Row, Table, TableStyle};
 use termcolor::{Color, ColorSpec, WriteColor};
 use tokio::sync::mpsc;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 use tracing::Instrument;
 
 use crate::error::Error;
@@ -147,7 +147,7 @@ where
             }
 
             tracing::trace!("sleeping");
-            delay_for(Duration::from_secs(5)).await;
+            sleep(Duration::from_secs(5)).await;
         }
     }
 
@@ -432,7 +432,7 @@ where
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "rusoto"))]
 mod tests {
     use super::*;
     use chrono::TimeZone;
