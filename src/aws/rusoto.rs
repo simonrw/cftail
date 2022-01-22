@@ -5,9 +5,6 @@ use super::{
     Output, Stack, StackEvent, StackResource,
 };
 use rusoto_cloudformation::{CloudFormation, CloudFormationClient};
-use rusoto_core::RusotoError;
-
-pub(crate) type AwsResult<T, E> = Result<T, RusotoError<E>>;
 
 #[async_trait::async_trait]
 impl AwsCloudFormationClient for CloudFormationClient {
@@ -72,8 +69,8 @@ impl From<rusoto_core::RusotoError<rusoto_cloudformation::DescribeStackResources
 impl From<DescribeStacksInput> for rusoto_cloudformation::DescribeStacksInput {
     fn from(i: DescribeStacksInput) -> Self {
         Self {
-            stack_name: i.stack_name.clone(),
-            next_token: i.next_token.clone(),
+            stack_name: i.stack_name,
+            next_token: i.next_token,
         }
     }
 }
@@ -81,8 +78,8 @@ impl From<DescribeStacksInput> for rusoto_cloudformation::DescribeStacksInput {
 impl From<DescribeStackEventsInput> for rusoto_cloudformation::DescribeStackEventsInput {
     fn from(i: DescribeStackEventsInput) -> Self {
         Self {
-            next_token: i.next_token.clone(),
-            stack_name: i.stack_name.clone(),
+            next_token: i.next_token,
+            stack_name: i.stack_name,
         }
     }
 }
@@ -151,7 +148,7 @@ impl From<rusoto_cloudformation::DescribeStackEventsOutput> for DescribeStackEve
 impl From<DescribeStackResourcesInput> for rusoto_cloudformation::DescribeStackResourcesInput {
     fn from(i: DescribeStackResourcesInput) -> Self {
         Self {
-            stack_name: Some(i.stack_name.clone()),
+            stack_name: Some(i.stack_name),
             ..Default::default()
         }
     }

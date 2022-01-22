@@ -47,9 +47,7 @@ pub(crate) async fn fetch_stack_resources(
     let name = name.into();
     tracing::debug!(name = ?name, "fetching nested resources");
     let res = client
-        .describe_stack_resources(DescribeStackResourcesInput {
-            stack_name: name,
-        })
+        .describe_stack_resources(DescribeStackResourcesInput { stack_name: name })
         .await
         .unwrap();
     Ok(res.stack_resources)

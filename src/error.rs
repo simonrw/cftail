@@ -1,6 +1,4 @@
 use eyre::WrapErr;
-use rusoto_cloudformation::DescribeStackEventsError;
-use rusoto_core::RusotoError;
 use serde::Deserialize;
 use std::str::FromStr;
 

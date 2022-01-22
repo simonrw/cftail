@@ -39,7 +39,7 @@ fn notify() -> Result<()> {
 fn notify() -> Result<()> {
     Notification::new()
         .summary("Deploy finished")
-        .body(&format!("deploy finished"))
+        .body("deploy finished")
         .appname("cftail")
         .show()?;
     Ok(())

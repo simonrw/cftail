@@ -92,8 +92,7 @@ fn create_client() -> CloudFormationClient {
     let region = Region::default();
     tracing::debug!(region = ?region, "chosen region");
 
-    let client = CloudFormationClient::new(region);
-    client
+    CloudFormationClient::new(region)
 }
 
 #[tokio::main]
