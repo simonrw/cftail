@@ -1,5 +1,5 @@
+use crate::aws::AwsCloudFormationClient;
 use eyre::{Context, Result};
-use rusoto_cloudformation::CloudFormationClient;
 use std::{collections::HashSet, iter::FromIterator};
 
 #[derive(Debug, Clone)]
@@ -9,7 +9,7 @@ pub(crate) struct StackInfo {
 }
 
 pub(crate) async fn build_stack_list(
-    client: &CloudFormationClient,
+    client: &impl AwsCloudFormationClient,
     stacks: &[String],
     nested: bool,
 ) -> Result<StackInfo> {

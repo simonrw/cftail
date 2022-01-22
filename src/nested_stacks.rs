@@ -1,9 +1,9 @@
+use crate::aws::{AwsCloudFormationClient, DescribeStackResourcesInput, StackResource};
 use eyre::{Result, WrapErr};
-use rusoto_cloudformation::{CloudFormation, DescribeStackResourcesInput};
 use std::collections::HashSet;
 
 pub(crate) async fn fetch_nested_stack_names(
-    client: &impl CloudFormation,
+    client: &impl AwsCloudFormationClient,
     root_stack_name: impl Into<String>,
 ) -> Result<HashSet<String>> {
     let root_stack_name = root_stack_name.into();
@@ -29,7 +29,7 @@ pub(crate) async fn fetch_nested_stack_names(
                 .await
                 .wrap_err("fetching stack resources")?;
             for resource in resources {
-                stacks.insert(resource.stack_name.unwrap());
+                stacks.insert(resource.stack_name);
                 if resource.resource_type == target_resource {
                     to_fetch.push(resource.physical_resource_id.unwrap());
                 }
@@ -41,18 +41,16 @@ pub(crate) async fn fetch_nested_stack_names(
 }
 
 pub(crate) async fn fetch_stack_resources(
-    client: &impl CloudFormation,
+    client: &impl AwsCloudFormationClient,
     name: impl Into<String>,
-) -> Result<Vec<rusoto_cloudformation::StackResource>> {
+) -> Result<Vec<StackResource>> {
     let name = name.into();
     tracing::debug!(name = ?name, "fetching nested resources");
     let res = client
         .describe_stack_resources(DescribeStackResourcesInput {
-            stack_name: Some(name),
-            ..Default::default()
+            stack_name: name,
         })
         .await
         .unwrap();
-    res.stack_resources
-        .ok_or_else(|| eyre::eyre!("no stack resources found"))
+    Ok(res.stack_resources)
 }

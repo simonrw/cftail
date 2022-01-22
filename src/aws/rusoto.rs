@@ -1,7 +1,8 @@
 use super::{
     AwsCloudFormationClient, DescribeStackEventsError, DescribeStackEventsInput,
-    DescribeStackEventsOutput, DescribeStacksError, DescribeStacksInput, DescribeStacksOutput,
-    Output, Stack, StackEvent,
+    DescribeStackEventsOutput, DescribeStackResourcesError, DescribeStackResourcesInput,
+    DescribeStackResourcesOutput, DescribeStacksError, DescribeStacksInput, DescribeStacksOutput,
+    Output, Stack, StackEvent, StackResource,
 };
 use rusoto_cloudformation::{CloudFormation, CloudFormationClient};
 use rusoto_core::RusotoError;
@@ -29,6 +30,16 @@ impl AwsCloudFormationClient for CloudFormationClient {
             .map(From::from)
             .map_err(From::from)
     }
+
+    async fn describe_stack_resources(
+        &self,
+        input: DescribeStackResourcesInput,
+    ) -> Result<DescribeStackResourcesOutput, DescribeStackResourcesError> {
+        CloudFormation::describe_stack_resources(self, input.into())
+            .await
+            .map(From::from)
+            .map_err(From::from)
+    }
 }
 
 // conversions to and from third party types
@@ -49,6 +60,15 @@ impl From<rusoto_core::RusotoError<rusoto_cloudformation::DescribeStackEventsErr
     }
 }
 
+impl From<rusoto_core::RusotoError<rusoto_cloudformation::DescribeStackResourcesError>>
+    for DescribeStackResourcesError
+{
+    fn from(
+        _: rusoto_core::RusotoError<rusoto_cloudformation::DescribeStackResourcesError>,
+    ) -> Self {
+        todo!()
+    }
+}
 impl From<DescribeStacksInput> for rusoto_cloudformation::DescribeStacksInput {
     fn from(i: DescribeStacksInput) -> Self {
         Self {
@@ -122,6 +142,40 @@ impl From<rusoto_cloudformation::DescribeStackEventsOutput> for DescribeStackEve
                 .iter()
                 .map(From::from)
                 .collect(),
+        }
+    }
+}
+
+// DescribeStackResources
+
+impl From<DescribeStackResourcesInput> for rusoto_cloudformation::DescribeStackResourcesInput {
+    fn from(i: DescribeStackResourcesInput) -> Self {
+        Self {
+            stack_name: Some(i.stack_name.clone()),
+            ..Default::default()
+        }
+    }
+}
+
+impl From<rusoto_cloudformation::DescribeStackResourcesOutput> for DescribeStackResourcesOutput {
+    fn from(o: rusoto_cloudformation::DescribeStackResourcesOutput) -> Self {
+        Self {
+            stack_resources: o
+                .stack_resources
+                .unwrap_or_else(Vec::new)
+                .iter()
+                .map(From::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<&rusoto_cloudformation::StackResource> for StackResource {
+    fn from(r: &rusoto_cloudformation::StackResource) -> Self {
+        Self {
+            resource_type: r.resource_type.clone(),
+            physical_resource_id: r.physical_resource_id.clone(),
+            stack_name: r.stack_name.as_ref().unwrap().clone(),
         }
     }
 }

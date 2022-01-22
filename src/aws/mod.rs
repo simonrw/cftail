@@ -12,6 +12,11 @@ pub(crate) trait AwsCloudFormationClient {
         &self,
         input: DescribeStackEventsInput,
     ) -> Result<DescribeStackEventsOutput, DescribeStackEventsError>;
+
+    async fn describe_stack_resources(
+        &self,
+        input: DescribeStackResourcesInput,
+    ) -> Result<DescribeStackResourcesOutput, DescribeStackResourcesError>;
 }
 
 #[derive(Debug)]
@@ -19,6 +24,11 @@ pub(crate) struct DescribeStacksError {}
 
 #[derive(Debug)]
 pub(crate) struct DescribeStackEventsError {}
+
+#[derive(Debug)]
+pub(crate) struct DescribeStackResourcesError {}
+
+// DescribeStacks
 
 #[derive(Default)]
 pub(crate) struct DescribeStacksInput {
@@ -39,6 +49,8 @@ pub(crate) struct DescribeStacksOutput {
     pub(crate) stacks: Vec<Stack>,
 }
 
+// DescribeStackEvents
+
 #[derive(Debug, Default)]
 pub(crate) struct DescribeStackEventsInput {
     pub(crate) stack_name: Option<String>,
@@ -56,4 +68,21 @@ pub(crate) struct StackEvent {
     pub(crate) resource_status: Option<String>,
     pub(crate) stack_name: String,
     pub(crate) resource_status_reason: Option<String>,
+}
+
+// DescribeStackResources
+
+#[derive(Debug, Default)]
+pub(crate) struct DescribeStackResourcesInput {
+    pub(crate) stack_name: String,
+}
+
+pub(crate) struct DescribeStackResourcesOutput {
+    pub(crate) stack_resources: Vec<StackResource>,
+}
+
+pub(crate) struct StackResource {
+    pub(crate) resource_type: String,
+    pub(crate) physical_resource_id: Option<String>,
+    pub(crate) stack_name: String,
 }
