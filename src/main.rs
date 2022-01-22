@@ -1,6 +1,8 @@
 use chrono::{prelude::*, Duration as ChronoDuration};
 use eyre::{Result, WrapErr};
+#[cfg(feature = "rusoto")]
 use rusoto_cloudformation::CloudFormationClient;
+#[cfg(feature = "rusoto")]
 use rusoto_core::Region;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -85,6 +87,15 @@ struct Opts {
     no_show_outputs: bool,
 }
 
+#[cfg(feature = "rusoto")]
+fn create_client() -> CloudFormationClient {
+    let region = Region::default();
+    tracing::debug!(region = ?region, "chosen region");
+
+    let client = CloudFormationClient::new(region);
+    client
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -106,10 +117,7 @@ async fn main() {
     let mut writer = Writer::new(&mut stdout);
 
     loop {
-        let region = Region::default();
-        tracing::debug!(region = ?region, "chosen region");
-
-        let client = CloudFormationClient::new(region);
+        let client = create_client();
         let stack_info = build_stack_list(&client, &opts.stack_names, opts.nested)
             .await
             .expect("building stack list");
