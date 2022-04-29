@@ -319,7 +319,7 @@ where
         let handles: Vec<_> = stacks
             .map(|stack_name| {
                 tracing::debug!(name = ?stack_name, "fetching events for stack");
-                let mut tx = tx.clone();
+                let tx = tx.clone();
                 let fetcher = Arc::clone(&self.fetcher);
                 let stack_name = stack_name.clone();
                 tracing::debug!("spawning task");
