@@ -9,10 +9,19 @@ use aws_sdk_cloudformation::Client;
 use aws_smithy_types::date_time::Format;
 
 macro_rules! send_request_with_retry {
-    ($builder:ident) => {
+    ($name:literal, $builder:ident) => {
         backoff::future::retry(backoff::ExponentialBackoff::default(), || async {
-            tracing::trace!("trying/retrying request");
-            $builder.clone().send().await.map_err(From::from)
+            $builder.clone().send().await.map_err(|e| match e {
+                e @ aws_sdk_cloudformation::SdkError::TimeoutError(_) => {
+                    let name = $name;
+                    tracing::trace!(%name, "timeout error, retrying");
+                    backoff::Error::Transient {
+                        err: e,
+                        retry_after: None,
+                    }
+                }
+                e => backoff::Error::permanent(e),
+            })
         })
         .await
         .map(From::from)
@@ -28,7 +37,7 @@ impl AwsCloudFormationClient for Client {
     ) -> Result<DescribeStacksOutput, DescribeStacksError> {
         let builder = Client::describe_stacks(self).stack_name(input.stack_name.unwrap());
         let builder = builder.set_next_token(input.next_token);
-        send_request_with_retry!(builder)
+        send_request_with_retry!("describe_stacks", builder)
     }
 
     async fn describe_stack_events(
@@ -37,7 +46,7 @@ impl AwsCloudFormationClient for Client {
     ) -> Result<DescribeStackEventsOutput, DescribeStackEventsError> {
         let builder = Client::describe_stack_events(self).stack_name(input.stack_name.unwrap());
         let builder = builder.set_next_token(input.next_token);
-        send_request_with_retry!(builder)
+        send_request_with_retry!("describe_stack_events", builder)
     }
 
     async fn describe_stack_resources(
@@ -45,7 +54,7 @@ impl AwsCloudFormationClient for Client {
         input: DescribeStackResourcesInput,
     ) -> Result<DescribeStackResourcesOutput, DescribeStackResourcesError> {
         let builder = Client::describe_stack_resources(self).stack_name(input.stack_name);
-        send_request_with_retry!(builder)
+        send_request_with_retry!("describe_stack_resources", builder)
     }
 }
 
@@ -55,7 +64,7 @@ impl From<aws_sdk_cloudformation::output::DescribeStackEventsOutput> for Describ
             next_token: o.next_token,
             stack_events: o
                 .stack_events
-                .unwrap_or_else(Vec::new)
+                .unwrap_or_default()
                 .iter()
                 .map(From::from)
                 .collect(),
@@ -80,7 +89,7 @@ impl From<aws_sdk_cloudformation::output::DescribeStacksOutput> for DescribeStac
         Self {
             stacks: o
                 .stacks
-                .unwrap_or_else(Vec::new)
+                .unwrap_or_default()
                 .iter()
                 .map(From::from)
                 .collect(),
@@ -115,7 +124,7 @@ impl From<aws_sdk_cloudformation::output::DescribeStackResourcesOutput>
         Self {
             stack_resources: o
                 .stack_resources
-                .unwrap_or_else(Vec::new)
+                .unwrap_or_default()
                 .iter()
                 .map(From::from)
                 .collect(),
@@ -169,8 +178,8 @@ impl From<aws_sdk_cloudformation::SdkError<aws_sdk_cloudformation::error::Descri
             aws_sdk_cloudformation::SdkError::ConstructionFailure(_) => todo!(),
             aws_sdk_cloudformation::SdkError::TimeoutError(_) => todo!(),
             aws_sdk_cloudformation::SdkError::DispatchFailure(_) => todo!(),
-            aws_sdk_cloudformation::SdkError::ResponseError { err, raw } => todo!(),
-            aws_sdk_cloudformation::SdkError::ServiceError { err, raw } => todo!(),
+            aws_sdk_cloudformation::SdkError::ResponseError { .. } => todo!(),
+            aws_sdk_cloudformation::SdkError::ServiceError { .. } => todo!(),
         }
     }
 }
@@ -191,8 +200,8 @@ impl
             aws_sdk_cloudformation::SdkError::ConstructionFailure(_) => todo!(),
             aws_sdk_cloudformation::SdkError::TimeoutError(_) => todo!(),
             aws_sdk_cloudformation::SdkError::DispatchFailure(_) => todo!(),
-            aws_sdk_cloudformation::SdkError::ResponseError { err, raw } => todo!(),
-            aws_sdk_cloudformation::SdkError::ServiceError { err, raw } => todo!(),
+            aws_sdk_cloudformation::SdkError::ResponseError { .. } => todo!(),
+            aws_sdk_cloudformation::SdkError::ServiceError { .. } => todo!(),
         }
     }
 }
