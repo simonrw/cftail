@@ -8,6 +8,18 @@ use super::{
 use aws_sdk_cloudformation::Client;
 use aws_smithy_types::date_time::Format;
 
+macro_rules! send_request_with_retry {
+    ($builder:ident) => {
+        backoff::future::retry(backoff::ExponentialBackoff::default(), || async {
+            tracing::trace!("trying/retrying request");
+            $builder.clone().send().await.map_err(From::from)
+        })
+        .await
+        .map(From::from)
+        .map_err(From::from)
+    };
+}
+
 #[async_trait::async_trait]
 impl AwsCloudFormationClient for Client {
     async fn describe_stacks(
@@ -16,7 +28,7 @@ impl AwsCloudFormationClient for Client {
     ) -> Result<DescribeStacksOutput, DescribeStacksError> {
         let builder = Client::describe_stacks(self).stack_name(input.stack_name.unwrap());
         let builder = builder.set_next_token(input.next_token);
-        builder.send().await.map(From::from).map_err(From::from)
+        send_request_with_retry!(builder)
     }
 
     async fn describe_stack_events(
@@ -25,7 +37,7 @@ impl AwsCloudFormationClient for Client {
     ) -> Result<DescribeStackEventsOutput, DescribeStackEventsError> {
         let builder = Client::describe_stack_events(self).stack_name(input.stack_name.unwrap());
         let builder = builder.set_next_token(input.next_token);
-        builder.send().await.map(From::from).map_err(From::from)
+        send_request_with_retry!(builder)
     }
 
     async fn describe_stack_resources(
@@ -33,7 +45,7 @@ impl AwsCloudFormationClient for Client {
         input: DescribeStackResourcesInput,
     ) -> Result<DescribeStackResourcesOutput, DescribeStackResourcesError> {
         let builder = Client::describe_stack_resources(self).stack_name(input.stack_name);
-        builder.send().await.map(From::from).map_err(From::from)
+        send_request_with_retry!(builder)
     }
 }
 
