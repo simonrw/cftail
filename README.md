@@ -2,6 +2,11 @@
 
 Tail for cloudformation stacks.
 
+## Installation
+
+* macos: `brew install mindriot101/cftail/cftail`
+* source: `cargo install --git https://github.com/mindriot101/cftail`
+
 ## Usage
 
 The program requires the name of the stack you wish to tail. Optionally, a timestamp can be specified with the `--since`
