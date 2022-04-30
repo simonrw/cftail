@@ -23,20 +23,29 @@ pub(crate) trait AwsCloudFormationClient {
 }
 
 #[derive(Debug)]
-pub(crate) enum DescribeStacksError {}
+pub(crate) enum DescribeStacksError {
+    Timeout,
+    Throttling,
+    Unknown,
+}
 
 #[derive(Debug)]
 #[non_exhaustive]
 pub(crate) enum DescribeStackEventsError {
     Timeout,
+    Throttling,
+    Unknown,
     Dispatch,
     Response,
     Service,
-    Other,
 }
 
 #[derive(Debug)]
-pub(crate) enum DescribeStackResourcesError {}
+pub(crate) enum DescribeStackResourcesError {
+    Timeout,
+    Throttling,
+    Unknown,
+}
 
 // DescribeStacks
 

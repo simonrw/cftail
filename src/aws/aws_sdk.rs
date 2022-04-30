@@ -9,18 +9,23 @@ use aws_sdk_cloudformation::Client;
 use aws_smithy_types::date_time::Format;
 
 macro_rules! send_request_with_retry {
-    ($name:literal, $builder:ident) => {
+    ($name:literal, $builder:ident, $err:ident) => {
         backoff::future::retry(backoff::ExponentialBackoff::default(), || async {
+            let name = $name;
             $builder.clone().send().await.map_err(|e| match e {
-                e @ aws_sdk_cloudformation::SdkError::TimeoutError(_) => {
-                    let name = $name;
+                aws_sdk_cloudformation::SdkError::TimeoutError(_) => {
                     tracing::trace!(%name, "timeout error, retrying");
-                    backoff::Error::Transient {
-                        err: e,
-                        retry_after: None,
-                    }
+                    backoff::Error::transient($err::Timeout)
                 }
-                e => backoff::Error::permanent(e),
+                aws_sdk_cloudformation::SdkError::ServiceError { err, .. } => match err.code() {
+                    Some(code) if code == "Throttling" => {
+                        tracing::trace!(%name, "throttling error, retrying");
+                        backoff::Error::transient($err::Throttling)
+                    }
+
+                    _ => backoff::Error::permanent($err::Unknown),
+                },
+                _ => backoff::Error::permanent($err::Unknown),
             })
         })
         .await
@@ -37,7 +42,7 @@ impl AwsCloudFormationClient for Client {
     ) -> Result<DescribeStacksOutput, DescribeStacksError> {
         let builder = Client::describe_stacks(self).stack_name(input.stack_name.unwrap());
         let builder = builder.set_next_token(input.next_token);
-        send_request_with_retry!("describe_stacks", builder)
+        send_request_with_retry!("describe_stacks", builder, DescribeStacksError)
     }
 
     async fn describe_stack_events(
@@ -46,7 +51,7 @@ impl AwsCloudFormationClient for Client {
     ) -> Result<DescribeStackEventsOutput, DescribeStackEventsError> {
         let builder = Client::describe_stack_events(self).stack_name(input.stack_name.unwrap());
         let builder = builder.set_next_token(input.next_token);
-        send_request_with_retry!("describe_stack_events", builder)
+        send_request_with_retry!("describe_stack_events", builder, DescribeStackEventsError)
     }
 
     async fn describe_stack_resources(
@@ -54,7 +59,11 @@ impl AwsCloudFormationClient for Client {
         input: DescribeStackResourcesInput,
     ) -> Result<DescribeStackResourcesOutput, DescribeStackResourcesError> {
         let builder = Client::describe_stack_resources(self).stack_name(input.stack_name);
-        send_request_with_retry!("describe_stack_resources", builder)
+        send_request_with_retry!(
+            "describe_stack_resources",
+            builder,
+            DescribeStackResourcesError
+        )
     }
 }
 
@@ -152,7 +161,7 @@ impl From<aws_sdk_cloudformation::SdkError<aws_sdk_cloudformation::error::Descri
     ) -> Self {
         match e {
             aws_sdk_cloudformation::SdkError::ConstructionFailure(_) => {
-                DescribeStackEventsError::Other
+                DescribeStackEventsError::Unknown
             }
             aws_sdk_cloudformation::SdkError::TimeoutError(_) => DescribeStackEventsError::Timeout,
             aws_sdk_cloudformation::SdkError::DispatchFailure(_) => {
