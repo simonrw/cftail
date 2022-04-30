@@ -1,7 +1,7 @@
 # This file is a template, and might need editing before it works on your project.
 # Official language image. Look for the different tagged releases at:
 # https://hub.docker.com/r/library/rust/tags/
-image: "rust:1.47.0"
+image: "rust:1.58.1"
 
 stages:
     - test
@@ -21,25 +21,15 @@ stages:
 #   - apt-get update -yqq
 #   - apt-get install -yqq --no-install-recommends build-essential
 
-.caching_rust: &caching_rust
-  cache:
-    paths:
-      - osxcross
-      - .cargo/
-      - /root/.cargo
-      - target
-
 # Use cargo to test the project
 test:cargo:
   stage: test
-  <<: *caching_rust
   script:
     - rustc --version && cargo --version  # Print version info for debugging
     - cargo test
 
 build_linux:
   stage: build_binaries
-  <<: *caching_rust
   before_script:
     - rustup target add x86_64-unknown-linux-gnu
   variables:

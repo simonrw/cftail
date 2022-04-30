@@ -1,13 +1,9 @@
 use eyre::WrapErr;
-use rusoto_cloudformation::DescribeStackEventsError;
-use rusoto_core::RusotoError;
 use serde::Deserialize;
 use std::str::FromStr;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum Error {
-    #[error("rusoto error {0}")]
-    Rusoto(#[from] RusotoError<DescribeStackEventsError>),
     #[error("error parsing --since argument")]
     ParseSince,
     #[error("no credentials found")]
@@ -22,6 +18,8 @@ pub(crate) enum Error {
     ErrorResponse(ErrorResponse),
     #[error("other error {0}")]
     Other(String),
+    #[error("aws client error")]
+    Client,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]

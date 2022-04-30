@@ -1,20 +1,16 @@
+use crate::aws::{DescribeStackEventsInput, DescribeStacksInput, StackEvent};
 use chrono::{DateTime, Utc};
 use eyre::{Result, WrapErr};
 use futures::future::join_all;
 use notify_rust::Notification;
-use rusoto_cloudformation::{
-    CloudFormation, CloudFormationClient, DescribeStackEventsInput, DescribeStacksInput, StackEvent,
-};
-use rusoto_core::RusotoError;
 use std::convert::TryFrom;
 use std::fmt::Debug;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use term_table::{row::Row, Table, TableStyle};
 use termcolor::{Color, ColorSpec, WriteColor};
 use tokio::sync::mpsc;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 use tracing::Instrument;
 
 use crate::error::Error;
@@ -43,7 +39,7 @@ fn notify() -> Result<()> {
 fn notify() -> Result<()> {
     Notification::new()
         .summary("Deploy finished")
-        .body(&format!("deploy finished"))
+        .body("deploy finished")
         .appname("cftail")
         .show()?;
     Ok(())
@@ -71,7 +67,7 @@ enum TailMode {
 }
 
 pub(crate) struct Tail<'a, W> {
-    fetcher: Arc<CloudFormationClient>,
+    fetcher: Arc<dyn crate::aws::AwsCloudFormationClient + Sync + Send>,
     writer: &'a mut W,
     config: TailConfig<'a>,
     mode: TailMode,
@@ -83,7 +79,7 @@ where
 {
     pub(crate) fn new(
         config: TailConfig<'a>,
-        fetcher: Arc<CloudFormationClient>,
+        fetcher: Arc<dyn crate::aws::AwsCloudFormationClient + Sync + Send>,
         writer: &'a mut W,
     ) -> Self {
         Self {
@@ -151,7 +147,7 @@ where
             }
 
             tracing::trace!("sleeping");
-            delay_for(Duration::from_secs(5)).await;
+            sleep(Duration::from_secs(5)).await;
         }
     }
 
@@ -184,7 +180,7 @@ where
     }
 
     #[tracing::instrument(skip(self, event))]
-    async fn print_event(&mut self, event: &rusoto_cloudformation::StackEvent) -> Result<()> {
+    async fn print_event(&mut self, event: &StackEvent) -> Result<()> {
         let resource_name = event
             .logical_resource_id
             .as_ref()
@@ -278,33 +274,27 @@ where
             ..Default::default()
         };
         let res = self.fetcher.describe_stacks(input).await.unwrap();
-        match res.stacks {
-            Some(stacks) => {
-                if stacks.len() != 1 {
-                    unreachable!(
-                        "unexpected number of stacks, found {}, expected 1",
-                        stacks.len()
-                    );
-                }
+        let stacks = res.stacks;
+        if stacks.len() != 1 {
+            unreachable!(
+                "unexpected number of stacks, found {}, expected 1",
+                stacks.len()
+            );
+        }
 
-                if let Some(outputs) = stacks[0].outputs.as_ref() {
-                    writeln!(self.writer, "\nOutputs:").unwrap();
+        if let Some(outputs) = stacks[0].outputs.as_ref() {
+            writeln!(self.writer, "\nOutputs:").unwrap();
 
-                    let mut table = Table::new();
-                    table.style = TableStyle::thin();
-                    table.add_row(Row::new(vec!["Name", "Value"]));
+            let mut table = Table::new();
+            table.style = TableStyle::thin();
+            table.add_row(Row::new(vec!["Name", "Value"]));
 
-                    for output in outputs {
-                        let name = output.output_key.as_ref().unwrap();
-                        let value = output.output_value.as_ref().unwrap();
-                        table.add_row(Row::new(vec![name, value]));
-                    }
-                    writeln!(self.writer, "{}", table.render()).unwrap();
-                } else {
-                    tracing::debug!("no outputs found");
-                }
+            for output in outputs {
+                table.add_row(Row::new(vec![&output.key, &output.value]));
             }
-            None => unreachable!(),
+            writeln!(self.writer, "{}", table.render()).unwrap();
+        } else {
+            tracing::debug!("no outputs found");
         }
         Ok(())
     }
@@ -329,7 +319,7 @@ where
         let handles: Vec<_> = stacks
             .map(|stack_name| {
                 tracing::debug!(name = ?stack_name, "fetching events for stack");
-                let mut tx = tx.clone();
+                let tx = tx.clone();
                 let fetcher = Arc::clone(&self.fetcher);
                 let stack_name = stack_name.clone();
                 tracing::debug!("spawning task");
@@ -353,27 +343,19 @@ where
                         match res {
                             Ok(response) => {
                                 tracing::debug!("got successful response");
-                                match response.stack_events {
-                                    Some(batch) => {
-                                        for event in batch {
-                                            let timestamp = crate::utils::parse_event_datetime(
-                                                event.timestamp.as_str(),
-                                            )?;
+                                for event in response.stack_events {
+                                    let timestamp = crate::utils::parse_event_datetime(
+                                        event.timestamp.as_str(),
+                                    )?;
 
-                                            // We know that the events are in reverse chronological
-                                            // order, so if we witness an event with a timestamp
-                                            // that's earlier than what we have already seen, then
-                                            // we know that it has already been presented.
-                                            if timestamp <= since {
-                                                break 'poll;
-                                            }
-                                            all_events.push(event);
-                                        }
+                                    // We know that the events are in reverse chronological
+                                    // order, so if we witness an event with a timestamp
+                                    // that's earlier than what we have already seen, then
+                                    // we know that it has already been presented.
+                                    if timestamp <= since {
+                                        break 'poll;
                                     }
-                                    None => {
-                                        tracing::debug!("reached end of events");
-                                        break;
-                                    }
+                                    all_events.push(event);
                                 }
 
                                 match response.next_token {
@@ -383,48 +365,19 @@ where
                             }
                             Err(e) => {
                                 tracing::warn!(error = ?e, "got failed response");
+                                use crate::aws::DescribeStackEventsError::*;
                                 match e {
-                                    RusotoError::Service(ref error) => {
-                                        tracing::error!(err = %error, "rusoto error");
-                                        return Err(Error::Rusoto(e)).wrap_err("rusoto error");
+                                    Service | Unknown | Response => {
+                                        tracing::error!("service error");
+                                        return Err(Error::Client).wrap_err("client error");
                                     }
-                                    RusotoError::Credentials(ref creds) => {
-                                        tracing::error!(creds = ?creds, "credentials err");
-                                        return Err(Error::NoCredentials)
-                                            .wrap_err("credentials error");
-                                    }
-                                    RusotoError::Unknown(response) => {
-                                        let body_str = std::str::from_utf8(&response.body)
-                                            .wrap_err(
-                                                "error decoding response body as utf8 string",
-                                            )?;
-                                        let error = crate::error::ErrorResponse::from_str(body_str)
-                                            .wrap_err("parsing error response")?;
-
-                                        let underlying = match error.error.code.as_str() {
-                                            "Throttling" => Error::RateLimitExceeded,
-                                            "ExpiredToken" => Error::CredentialsExpired,
-                                            "ValidationError" => Error::NoStack(stack_name.clone()),
-                                            _ => Error::ErrorResponse(error),
-                                        };
-                                        return Err(underlying).wrap_err("rusoto error");
-                                    }
-                                    RusotoError::HttpDispatch(_e) => {
-                                        // Do nothing, these are usually temporary
-                                    }
-                                    _ => {
-                                        tracing::error!(err = ?e, "other sort of error");
-                                        return Err(Error::Other(format!("{:?}", e)))
-                                            .wrap_err("other error");
-                                    }
+                                    _ => {}
                                 }
                             }
                         };
                     }
 
-                    tx.send(all_events)
-                        .await
-                        .wrap_err("error sending events over channel")?;
+                    let _ = tx.send(all_events).await;
 
                     Ok::<(), eyre::Error>(())
                 })
@@ -452,10 +405,11 @@ where
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "rusoto"))]
 mod tests {
     use super::*;
     use chrono::TimeZone;
+    use rusoto_cloudformation::CloudFormationClient;
     use rusoto_mock::{
         MockCredentialsProvider, MockRequestDispatcher, MockResponseReader, ReadMockResponse,
     };
