@@ -3,6 +3,7 @@ mod aws_sdk;
 #[cfg(feature = "rusoto")]
 mod rusoto;
 
+
 /// Trait representing interactions with CloudFormation
 #[async_trait::async_trait]
 pub(crate) trait AwsCloudFormationClient {
@@ -22,29 +23,41 @@ pub(crate) trait AwsCloudFormationClient {
     ) -> Result<DescribeStackResourcesOutput, DescribeStackResourcesError>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum DescribeStacksError {
+    #[error("request timeout")]
     Timeout,
+    #[error("request was throttled")]
     Throttling,
-    Unknown,
+    #[error("unknown error: {0}")]
+    Unknown(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub(crate) enum DescribeStackEventsError {
+    #[error("request timeout")]
     Timeout,
+    #[error("request was throttled")]
     Throttling,
-    Unknown,
+    #[error("unknown error: {0}")]
+    Unknown(String),
+    #[error("error dispatching request")]
     Dispatch,
+    #[error("error with respone")]
     Response,
+    #[error("service error")]
     Service,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum DescribeStackResourcesError {
+    #[error("request timeout")]
     Timeout,
+    #[error("request was throttled")]
     Throttling,
-    Unknown,
+    #[error("unknown error: {0}")]
+    Unknown(String),
 }
 
 // DescribeStacks

@@ -26,9 +26,9 @@ macro_rules! send_request_with_retry {
                         backoff::Error::transient($err::Throttling)
                     }
 
-                    _ => backoff::Error::permanent($err::Unknown),
+                    _ => backoff::Error::permanent($err::Unknown(err.to_string())),
                 },
-                _ => backoff::Error::permanent($err::Unknown),
+                _ => backoff::Error::permanent($err::Unknown(e.to_string())),
             })
         })
         .await
@@ -164,7 +164,7 @@ impl From<aws_sdk_cloudformation::SdkError<aws_sdk_cloudformation::error::Descri
     ) -> Self {
         match e {
             aws_sdk_cloudformation::SdkError::ConstructionFailure(_) => {
-                DescribeStackEventsError::Unknown
+                DescribeStackEventsError::Unknown("construction failure".to_string())
             }
             aws_sdk_cloudformation::SdkError::TimeoutError(_) => DescribeStackEventsError::Timeout,
             aws_sdk_cloudformation::SdkError::DispatchFailure(_) => {

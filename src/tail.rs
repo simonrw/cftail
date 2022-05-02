@@ -367,8 +367,12 @@ where
                                 tracing::warn!(error = ?e, "got failed response");
                                 use crate::aws::DescribeStackEventsError::*;
                                 match e {
-                                    Service | Unknown | Response => {
+                                    Service | Response => {
                                         tracing::error!("service error");
+                                        return Err(Error::Client).wrap_err("client error");
+                                    }
+                                    Unknown(msg) => {
+                                        tracing::error!(%msg, "unexpected error");
                                         return Err(Error::Client).wrap_err("client error");
                                     }
                                     _ => {}
