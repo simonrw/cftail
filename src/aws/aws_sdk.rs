@@ -12,6 +12,9 @@ macro_rules! send_request_with_retry {
     ($name:literal, $builder:ident, $err:ident) => {
         backoff::future::retry(backoff::ExponentialBackoff::default(), || async {
             let name = $name;
+            // any errors that deserve a retry should be wrapped in a `backoff::Error::Temporary`
+            // type so that the retry behaviour kicks in. Other types of errors should be
+            // `backoff::Error::Permanent` to indicate that the failure should not be retried.
             $builder.clone().send().await.map_err(|e| match e {
                 aws_sdk_cloudformation::SdkError::TimeoutError(_) => {
                     tracing::trace!(%name, "timeout error, retrying");
