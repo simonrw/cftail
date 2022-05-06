@@ -491,3 +491,125 @@ mod tests {
         );
     }
 }
+
+#[cfg(all(test, feature = "aws-sdk"))]
+mod tests {
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use chrono::{TimeZone, Utc};
+    use termcolor::{ColorSpec, WriteColor};
+
+    use crate::{
+        aws::StackEvent,
+        stacks::StackInfo,
+        tail::{Tail, TailConfig},
+    };
+
+    #[derive(Debug, Default)]
+    struct StubWriter {
+        buf: Vec<u8>,
+    }
+
+    impl std::io::Write for StubWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.buf.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl WriteColor for StubWriter {
+        fn supports_color(&self) -> bool {
+            true
+        }
+
+        fn set_color(&mut self, _spec: &ColorSpec) -> std::io::Result<()> {
+            Ok(())
+        }
+
+        fn reset(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct MockClient;
+
+    #[async_trait]
+    impl crate::aws::AwsCloudFormationClient for MockClient {
+        async fn describe_stacks(
+            &self,
+            input: crate::aws::DescribeStacksInput,
+        ) -> Result<crate::aws::DescribeStacksOutput, crate::aws::DescribeStacksError> {
+            todo!()
+        }
+
+        async fn describe_stack_events(
+            &self,
+            input: crate::aws::DescribeStackEventsInput,
+        ) -> Result<crate::aws::DescribeStackEventsOutput, crate::aws::DescribeStackEventsError>
+        {
+            Ok(crate::aws::DescribeStackEventsOutput {
+                next_token: None,
+                stack_events: vec![StackEvent {
+                    timestamp: "2020-11-17T10:38:57.149Z".to_string(),
+                    logical_resource_id: Some("test-stack".to_string()),
+                    resource_status: Some("UPDATE_COMPLETE".to_string()),
+                    stack_name: "test-stack".to_string(),
+                    resource_status_reason: None,
+                }],
+            })
+        }
+
+        async fn describe_stack_resources(
+            &self,
+            input: crate::aws::DescribeStackResourcesInput,
+        ) -> Result<crate::aws::DescribeStackResourcesOutput, crate::aws::DescribeStackResourcesError>
+        {
+            todo!()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_prefetch() {
+        tracing_subscriber::fmt::init();
+        use std::collections::HashSet;
+
+        let client = MockClient {};
+        let stacks = {
+            let mut stacks = HashSet::new();
+            stacks.insert(String::from("SampleStack"));
+            stacks
+        };
+        let original_stack_names = {
+            let mut s = HashSet::new();
+            s.insert(String::from("SampleStack"));
+            s
+        };
+        let stack_info = StackInfo {
+            original_names: original_stack_names,
+            names: stacks,
+        };
+        let config = TailConfig {
+            since: Utc.timestamp(0, 0),
+            stack_info: &stack_info,
+            show_separators: true,
+            show_notifications: true,
+            show_outputs: true,
+        };
+        let mut writer = StubWriter::default();
+
+        let mut tail = Tail::new(config, Arc::new(client), &mut writer);
+
+        tail.prefetch().await.unwrap();
+
+        let buf = std::str::from_utf8(&writer.buf).unwrap();
+        assert_eq!(
+            buf,
+            "2020-11-17T10:38:57.149Z: test-stack - test-stack | UPDATE_COMPLETE\n"
+        );
+    }
+}
