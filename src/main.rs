@@ -89,6 +89,10 @@ struct Opts {
     // Do not print stack outputs on completion
     #[structopt(long)]
     no_show_outputs: bool,
+
+    // Sound to play
+    #[structopt(long, default_value="Ping")]
+    sound: String,
 }
 
 #[cfg(feature = "rusoto")]
@@ -137,6 +141,7 @@ async fn main() {
             show_separators: !opts.no_show_separators,
             show_notifications: !opts.no_show_notifications,
             show_outputs: !opts.no_show_outputs,
+            sound: opts.sound.clone(),
         };
 
         let mut tail = Tail::new(config, Arc::new(client), &mut writer);

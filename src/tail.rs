@@ -24,19 +24,20 @@ fn event_sort_key(a: &StackEvent, b: &StackEvent) -> std::cmp::Ordering {
 }
 
 #[cfg(target_os = "macos")]
-fn notify() -> Result<()> {
+fn notify(sound: impl AsRef<str>) -> Result<()> {
+    let sound_name = sound.as_ref();
     Notification::new()
         .summary("Deploy finished")
         .body("deploy finished")
         .appname("cftail")
-        .sound_name("Ping")
+        .sound_name(sound_name)
         .show()?;
     Ok(())
 }
 
 // We can customise this further on linux, but I don't have a copy available
 #[cfg(target_os = "linux")]
-fn notify() -> Result<()> {
+fn notify(_sound: Option<&str>) -> Result<()> {
     Notification::new()
         .summary("Deploy finished")
         .body("deploy finished")
@@ -57,6 +58,7 @@ pub(crate) struct TailConfig<'a> {
     pub(crate) show_separators: bool,
     pub(crate) show_notifications: bool,
     pub(crate) show_outputs: bool,
+    pub(crate) sound: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -255,7 +257,7 @@ where
             }
             if self.config.show_notifications {
                 if let TailMode::Tail = self.mode {
-                    notify().wrap_err("showing notification")?;
+                    notify(&self.config.sound).wrap_err("showing notification")?;
                 }
             }
         } else {
@@ -599,6 +601,7 @@ mod tests {
             show_separators: true,
             show_notifications: true,
             show_outputs: true,
+            sound: "Ping".to_string(),
         };
         let mut writer = StubWriter::default();
 
