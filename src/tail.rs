@@ -37,7 +37,7 @@ fn notify(sound: impl AsRef<str>) -> Result<()> {
 
 // We can customise this further on linux, but I don't have a copy available
 #[cfg(target_os = "linux")]
-fn notify(_sound: Option<&str>) -> Result<()> {
+fn notify(_sound: impl AsRef<str>) -> Result<()> {
     Notification::new()
         .summary("Deploy finished")
         .body("deploy finished")
