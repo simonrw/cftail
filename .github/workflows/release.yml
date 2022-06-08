@@ -52,7 +52,7 @@ jobs:
         run: |
           cargo build --all --release 
           strip target/release/cftail
-          zip cftail_${{ github.ref_name }}_x86_64-apple-darwin.zip target/release/cftail
+          zip -j cftail_${{ github.ref_name }}_x86_64-apple-darwin.zip target/release/cftail
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v1-release
         with:
