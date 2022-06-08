@@ -47,7 +47,7 @@ fn notify(_sound: impl AsRef<str>) -> Result<()> {
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn notify() -> Result<()> {
+fn notify(_sound: impl AsRef<str>) -> Result<()> {
     Ok(())
 }
 
