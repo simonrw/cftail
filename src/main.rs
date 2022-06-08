@@ -69,8 +69,9 @@ struct Opts {
     /// Name of the stacks to tail
     stack_names: Vec<String>,
 
-    /// When to start fetching data from. This could be a timestamp, text string, or the words
-    /// `today` or `yesterday`
+    /// When to start fetching data from. This could be a timestamp, text
+    /// string, a relative offset like 10s, 10m, or the words `today` or
+    /// `yesterday`
     #[structopt(short, long, parse(try_from_str = parse_since_argument))]
     since: Option<DateTime<Utc>>,
 
