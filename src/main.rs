@@ -25,6 +25,12 @@ use crate::writer::Writer;
 
 // Custom parser for parsing the datetime as either a timestamp, or as a handy string.
 fn parse_since_argument(src: &str) -> Result<DateTime<Utc>> {
+    // Try to parse as relative offset
+    if let Ok(dur) = humantime::parse_duration(src) {
+        let now = Utc::now();
+        return Ok(now - ChronoDuration::from_std(dur).unwrap());
+    }
+
     // Try to parse as datetime
     if let Ok(dt) = DateTime::from_str(src) {
         return Ok(dt);

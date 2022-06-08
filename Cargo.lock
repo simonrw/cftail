@@ -534,6 +534,7 @@ dependencies = [
  "env_logger",
  "eyre",
  "futures",
+ "humantime",
  "log",
  "notify-rust",
  "serde",
