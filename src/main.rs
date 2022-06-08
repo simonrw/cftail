@@ -7,12 +7,6 @@ use structopt::StructOpt;
 use termcolor::{ColorChoice, StandardStream};
 use tokio::time::sleep;
 
-#[cfg(feature = "rusoto")]
-use rusoto_cloudformation::CloudFormationClient;
-#[cfg(feature = "rusoto")]
-use rusoto_core::Region;
-
-#[cfg(feature = "aws-sdk")]
 use aws_sdk_cloudformation::Client;
 
 mod aws;
@@ -95,15 +89,6 @@ struct Opts {
     sound: String,
 }
 
-#[cfg(feature = "rusoto")]
-async fn create_client() -> CloudFormationClient {
-    let region = Region::default();
-    tracing::debug!(region = ?region, "chosen region");
-
-    CloudFormationClient::new(region)
-}
-
-#[cfg(feature = "aws-sdk")]
 async fn create_client() -> aws_sdk_cloudformation::Client {
     let config = aws_config::load_from_env().await;
     Client::new(&config)
