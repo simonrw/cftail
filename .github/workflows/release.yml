@@ -36,10 +36,21 @@ jobs:
       - name: Install dependencies
         run: |
           brew install libnotify
-      - name: Compile and release
-        uses: rust-build/rust-build.action@v1.3.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install rust toolchain
+        uses: actions-rs/toolchain@v1
         with:
-          RUSTTARGET: x86_64-apple-darwin
-          ARCHIVE_TYPES: zip
+          toolchain: stable
+          target: x86_64-apple-darwin
+          default: true
+          override: true
+      - name: Build
+        run: |
+          cargo build --all --release 
+          strip target/release/cftail
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v1-release
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/release/cftail
+          asset_name: cftail
+          tag: ${{ github.ref }}
