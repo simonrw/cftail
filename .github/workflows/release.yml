@@ -16,8 +16,6 @@ jobs:
             archive: zip
           - target: x86_64-unknown-linux-musl
             archive: tar.gz tar.xz
-          - target: x86_64-apple-darwin
-            archive: zip
     steps:
       - uses: actions/checkout@master
       - name: Compile and release
@@ -27,3 +25,21 @@ jobs:
         with:
           RUSTTARGET: ${{ matrix.target }}
           ARCHIVE_TYPES: ${{ matrix.archive }}
+
+  release-macos:
+    name: release on macos
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@master
+      - name: Install dependencies
+        run: |
+          brew install libnotify
+      - name: Compile and release
+        uses: rust-build/rust-build.action@v1.3.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          RUSTTARGET: x86_64-apple-darwin
+          ARCHIVE_TYPES: zip
