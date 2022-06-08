@@ -52,11 +52,11 @@ jobs:
         run: |
           cargo build --all --release 
           strip target/release/cftail
-          zip cftail_v${{ github.ref_name }}_x86_64-apple-darwin.zip target/release/cftail
+          zip cftail_${{ github.ref_name }}_x86_64-apple-darwin.zip target/release/cftail
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v1-release
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: cftail_v${{ github.ref_name }}_x86_64-apple-darwin.zip
-          asset_name: cftail_v${{ github.ref_name }}_x86_64-apple-darwin.zip
+          file: cftail_${{ github.ref_name }}_x86_64-apple-darwin.zip
+          asset_name: cftail_${{ github.ref_name }}_x86_64-apple-darwin.zip
           tag: ${{ github.ref }}
