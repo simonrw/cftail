@@ -7,7 +7,7 @@ use structopt::StructOpt;
 use termcolor::{ColorChoice, StandardStream};
 use tokio::time::sleep;
 
-use aws_sdk_cloudformation::Client;
+use aws_sdk_cloudformation::{Client, Endpoint};
 
 mod aws;
 mod error;
@@ -92,12 +92,23 @@ struct Opts {
     no_show_outputs: bool,
 
     // Sound to play
-    #[structopt(long, default_value="Ping")]
+    #[structopt(long, default_value = "Ping")]
     sound: String,
+
+    /// Local enpdoint url
+    #[structopt(long)]
+    endpoint_url: Option<String>,
 }
 
-async fn create_client() -> aws_sdk_cloudformation::Client {
-    let config = aws_config::load_from_env().await;
+async fn create_client(endpoint_url: &Option<String>) -> aws_sdk_cloudformation::Client {
+    let config = if let Some(url) = endpoint_url {
+        aws_config::from_env()
+            .endpoint_resolver(Endpoint::immutable(url.parse().expect("invalid URI")))
+            .load()
+            .await
+    } else {
+        aws_config::load_from_env().await
+    };
     Client::new(&config)
 }
 
@@ -122,7 +133,7 @@ async fn main() {
     let mut writer = Writer::new(&mut stdout);
 
     loop {
-        let client = create_client().await;
+        let client = create_client(&opts.endpoint_url).await;
         let stack_info = build_stack_list(&client, &opts.stack_names, opts.nested)
             .await
             .expect("building stack list");

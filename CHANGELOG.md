@@ -1,13 +1,8 @@
-# Changelog
 
-## Unreleased
+# 2022-09-03
 
-### Added
+# 2022-09-03
 
-* Supports fetching nested stacks [#1](https://github.com/mindriot101/cftail/pull/1)
+## Added
 
-### Changed
-
-* Improves poll speed by not fetching all events for each poll update [#5](https://github.com/mindriot101/cftail/pull/5)
-
-### Removed
+- Support for --endpoint-url for use with e.g. localstack
