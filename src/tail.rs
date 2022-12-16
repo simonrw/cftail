@@ -58,6 +58,7 @@ pub(crate) struct TailConfig<'a> {
     pub(crate) show_separators: bool,
     pub(crate) show_notifications: bool,
     pub(crate) show_outputs: bool,
+    pub(crate) show_resource_types: bool,
     pub(crate) sound: String,
 }
 
@@ -229,14 +230,16 @@ where
             .wrap_err("printing resource name")?;
         }
 
-        // resource type
-        write!(self.writer, " | ").wrap_err("writing separator")?;
-        {
-            let mut spec = ColorSpec::new();
-            spec.set_fg(Some(Color::Magenta));
-            self.writer.set_color(&spec).wrap_err("setting color")?;
-            write!(self.writer, "({resource_type})").wrap_err("printing resource type")?;
-            self.writer.reset().wrap_err("resetting color")?;
+        if self.config.show_resource_types {
+            // resource type
+            write!(self.writer, " | ").wrap_err("writing separator")?;
+            {
+                let mut spec = ColorSpec::new();
+                spec.set_fg(Some(Color::Magenta));
+                self.writer.set_color(&spec).wrap_err("setting color")?;
+                write!(self.writer, "({resource_type})").wrap_err("printing resource type")?;
+                self.writer.reset().wrap_err("resetting color")?;
+            }
         }
 
         write!(self.writer, " | ").wrap_err("writing separator")?;
@@ -534,6 +537,7 @@ mod tests {
             show_notifications: true,
             show_outputs: true,
             sound: "Ping".to_string(),
+            show_resource_types: true,
         };
         let mut writer = StubWriter::default();
 
