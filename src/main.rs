@@ -60,11 +60,11 @@ fn parse_since_argument(src: &str) -> Result<DateTime<Utc>> {
     Err(Error::ParseSince).wrap_err("error parsing since argument")
 }
 
-#[derive(StructOpt)]
-#[structopt(author = "Simon Walker")]
 /// Tail CloudFormation deployments
 ///
 /// Watch a log of deployment events for CloudFormation stacks from your console.
+#[derive(StructOpt)]
+#[structopt(author = "Simon Walker")]
 struct Opts {
     /// Name of the stacks to tail
     stack_names: Vec<String>,
@@ -90,6 +90,10 @@ struct Opts {
     // Do not print stack outputs on completion
     #[structopt(long)]
     no_show_outputs: bool,
+
+    // Do not show resource types
+    #[structopt(long)]
+    no_show_resource_types: bool,
 
     // Sound to play
     #[structopt(long, default_value = "Ping")]
@@ -144,6 +148,7 @@ async fn main() {
             show_separators: !opts.no_show_separators,
             show_notifications: !opts.no_show_notifications,
             show_outputs: !opts.no_show_outputs,
+            show_resource_types: !opts.no_show_resource_types,
             sound: opts.sound.clone(),
         };
 

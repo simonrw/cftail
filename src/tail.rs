@@ -58,6 +58,7 @@ pub(crate) struct TailConfig<'a> {
     pub(crate) show_separators: bool,
     pub(crate) show_notifications: bool,
     pub(crate) show_outputs: bool,
+    pub(crate) show_resource_types: bool,
     pub(crate) sound: String,
 }
 
@@ -194,9 +195,14 @@ where
         let stack_name = event.stack_name.as_str();
         let timestamp = &event.timestamp;
         let status_reason = event.resource_status_reason.as_ref();
+        let resource_type = event.resource_type.clone().unwrap_or("???".to_string());
 
+        // timestamp
         write!(self.writer, "{timestamp}: ", timestamp = timestamp)
             .wrap_err("printing timestamp")?;
+
+        // stack name and resource name, yellow if the resource name is the stack name, otherwise
+        // in white
         if self
             .config
             .stack_info
@@ -224,7 +230,19 @@ where
             .wrap_err("printing resource name")?;
         }
 
-        write!(self.writer, " | ").wrap_err("printing pipe character")?;
+        if self.config.show_resource_types {
+            // resource type
+            write!(self.writer, " | ").wrap_err("writing separator")?;
+            {
+                let mut spec = ColorSpec::new();
+                spec.set_fg(Some(Color::Magenta));
+                self.writer.set_color(&spec).wrap_err("setting color")?;
+                write!(self.writer, "{resource_type}").wrap_err("printing resource type")?;
+                self.writer.reset().wrap_err("resetting color")?;
+            }
+        }
+
+        write!(self.writer, " | ").wrap_err("writing separator")?;
 
         let stack_status = crate::stack_status::StackStatus::try_from(status.as_str())
             .expect("unhandled stack status");
@@ -476,6 +494,7 @@ mod tests {
                     timestamp: "2020-11-17T10:38:57.149Z".to_string(),
                     logical_resource_id: Some("test-stack".to_string()),
                     resource_status: Some("UPDATE_COMPLETE".to_string()),
+                    resource_type: Some("stack".to_string()),
                     stack_name: "test-stack".to_string(),
                     resource_status_reason: None,
                 }],
@@ -518,6 +537,7 @@ mod tests {
             show_notifications: true,
             show_outputs: true,
             sound: "Ping".to_string(),
+            show_resource_types: true,
         };
         let mut writer = StubWriter::default();
 
@@ -528,7 +548,7 @@ mod tests {
         let buf = std::str::from_utf8(&writer.buf).unwrap();
         assert_eq!(
             buf,
-            "2020-11-17T10:38:57.149Z: test-stack - test-stack | UPDATE_COMPLETE\n"
+            "2020-11-17T10:38:57.149Z: test-stack - test-stack | stack | UPDATE_COMPLETE\n"
         );
     }
 }

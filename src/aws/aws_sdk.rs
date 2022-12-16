@@ -92,6 +92,7 @@ impl From<&aws_sdk_cloudformation::model::StackEvent> for StackEvent {
             resource_status: e.resource_status.as_ref().map(|s| s.as_str().to_owned()),
             stack_name: e.stack_name.as_ref().unwrap().clone(),
             resource_status_reason: e.resource_status_reason.clone(),
+            resource_type: e.resource_type.clone(),
         }
     }
 }
@@ -154,8 +155,12 @@ impl From<&aws_sdk_cloudformation::model::StackResource> for StackResource {
     }
 }
 
-impl From<aws_sdk_cloudformation::types::SdkError<aws_sdk_cloudformation::error::DescribeStackEventsError>>
-    for DescribeStackEventsError
+impl
+    From<
+        aws_sdk_cloudformation::types::SdkError<
+            aws_sdk_cloudformation::error::DescribeStackEventsError,
+        >,
+    > for DescribeStackEventsError
 {
     fn from(
         e: aws_sdk_cloudformation::types::SdkError<
@@ -166,7 +171,9 @@ impl From<aws_sdk_cloudformation::types::SdkError<aws_sdk_cloudformation::error:
             aws_sdk_cloudformation::types::SdkError::ConstructionFailure(_) => {
                 DescribeStackEventsError::Unknown("construction failure".to_string())
             }
-            aws_sdk_cloudformation::types::SdkError::TimeoutError(_) => DescribeStackEventsError::Timeout,
+            aws_sdk_cloudformation::types::SdkError::TimeoutError(_) => {
+                DescribeStackEventsError::Timeout
+            }
             aws_sdk_cloudformation::types::SdkError::DispatchFailure(_) => {
                 DescribeStackEventsError::Dispatch
             }
@@ -180,11 +187,15 @@ impl From<aws_sdk_cloudformation::types::SdkError<aws_sdk_cloudformation::error:
     }
 }
 
-impl From<aws_sdk_cloudformation::types::SdkError<aws_sdk_cloudformation::error::DescribeStacksError>>
-    for DescribeStacksError
+impl
+    From<
+        aws_sdk_cloudformation::types::SdkError<aws_sdk_cloudformation::error::DescribeStacksError>,
+    > for DescribeStacksError
 {
     fn from(
-        e: aws_sdk_cloudformation::types::SdkError<aws_sdk_cloudformation::error::DescribeStacksError>,
+        e: aws_sdk_cloudformation::types::SdkError<
+            aws_sdk_cloudformation::error::DescribeStacksError,
+        >,
     ) -> Self {
         match e {
             aws_sdk_cloudformation::types::SdkError::ConstructionFailure(_) => todo!(),

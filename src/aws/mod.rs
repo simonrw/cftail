@@ -1,6 +1,5 @@
 mod aws_sdk;
 
-
 /// Trait representing interactions with CloudFormation
 #[async_trait::async_trait]
 pub(crate) trait AwsCloudFormationClient {
@@ -95,6 +94,7 @@ pub(crate) struct StackEvent {
     pub(crate) timestamp: String,
     pub(crate) logical_resource_id: Option<String>,
     pub(crate) resource_status: Option<String>,
+    pub(crate) resource_type: Option<String>,
     pub(crate) stack_name: String,
     pub(crate) resource_status_reason: Option<String>,
 }
