@@ -237,7 +237,7 @@ where
                 let mut spec = ColorSpec::new();
                 spec.set_fg(Some(Color::Magenta));
                 self.writer.set_color(&spec).wrap_err("setting color")?;
-                write!(self.writer, "({resource_type})").wrap_err("printing resource type")?;
+                write!(self.writer, "{resource_type}").wrap_err("printing resource type")?;
                 self.writer.reset().wrap_err("resetting color")?;
             }
         }
@@ -548,7 +548,7 @@ mod tests {
         let buf = std::str::from_utf8(&writer.buf).unwrap();
         assert_eq!(
             buf,
-            "2020-11-17T10:38:57.149Z: test-stack - test-stack | UPDATE_COMPLETE\n"
+            "2020-11-17T10:38:57.149Z: test-stack - test-stack | stack | UPDATE_COMPLETE\n"
         );
     }
 }
