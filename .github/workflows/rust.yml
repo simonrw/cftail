@@ -40,7 +40,7 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-11
+          - macos-latest
     runs-on: ${{ matrix.os }}
 
     steps:
