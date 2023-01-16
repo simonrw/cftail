@@ -11,8 +11,13 @@ env:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v2
@@ -29,3 +34,16 @@ jobs:
       uses: actions-rs/cargo@v1.0.1
       with:
         command: test
+
+  nixtest:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: cachix/install-nix-action@v18
+      - run: nix build -L
