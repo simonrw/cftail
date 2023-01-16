@@ -14,15 +14,25 @@
         pkgs = (import nixpkgs) {
           inherit system;
         };
+
+        frameworks = if pkgs.stdenv.isDarwin then pkgs.darwin.apple_sdk.frameworks else null;
       in
       {
         packages.default = craneLib.buildPackage {
           src = craneLib.cleanCargoSource ./.;
           buildInputs = [
             pkgs.libiconv
-          ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
-            pkgs.darwin.apple_sdk.frameworks.Cocoa
-          ];
+          ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin (
+            [
+              frameworks.Cocoa
+              frameworks.AppKit
+            ]
+          );
+
+          NIX_LDFLAGS =
+            if pkgs.stdenv.isDarwin
+            then "-F${frameworks.Cocoa}/Library/Frameworks -F ${frameworks.AppKit}/Library/Frameworks -framework Cocoa -framework AppKit"
+            else "";
         };
       }
     );
