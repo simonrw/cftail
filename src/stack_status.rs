@@ -2,6 +2,7 @@ use crate::error::Error;
 use std::convert::TryFrom;
 use termcolor::{Color, ColorSpec};
 
+#[derive(Debug)]
 pub(crate) enum StackStatus {
     CreateInProgress,
     CreateComplete,
@@ -107,7 +108,8 @@ impl StackStatus {
     }
 
     pub(crate) fn is_complete(&self) -> bool {
-        matches!(self,
+        matches!(
+            self,
             Self::CreateComplete
                 | Self::DeleteComplete
                 | Self::RollbackComplete

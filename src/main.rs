@@ -102,6 +102,10 @@ struct Opts {
     /// Local enpdoint url
     #[structopt(long)]
     endpoint_url: Option<String>,
+
+    /// Exit when the stack deploy has finished
+    #[structopt(long)]
+    exit_when_stack_deploys: bool,
 }
 
 async fn create_client(endpoint_url: &Option<String>) -> aws_sdk_cloudformation::Client {
@@ -150,6 +154,7 @@ async fn main() {
             show_outputs: !opts.no_show_outputs,
             show_resource_types: !opts.no_show_resource_types,
             sound: opts.sound.clone(),
+            exit_when_stack_deploys: opts.exit_when_stack_deploys,
         };
 
         let mut tail = Tail::new(config, Arc::new(client), &mut writer);
@@ -187,7 +192,11 @@ async fn main() {
 
         tracing::debug!("starting poll loop");
         match tail.poll().await {
-            Ok(_) => unreachable!(),
+            Ok(_) => {
+                tracing::info!("exiting from tail successfully");
+                // found our exit early condition
+                return;
+            }
             Err(e) => match e.downcast_ref::<Error>() {
                 Some(Error::CredentialsExpired) => {
                     eprintln!("Error: your credentials have expired");

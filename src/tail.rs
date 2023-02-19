@@ -5,6 +5,7 @@ use futures::future::join_all;
 use notify_rust::Notification;
 use std::convert::TryFrom;
 use std::fmt::Debug;
+use std::sync::atomic::{self, AtomicBool};
 use std::sync::Arc;
 use std::time::Duration;
 use term_table::{row::Row, Table, TableStyle};
@@ -60,6 +61,7 @@ pub(crate) struct TailConfig<'a> {
     pub(crate) show_outputs: bool,
     pub(crate) show_resource_types: bool,
     pub(crate) sound: String,
+    pub(crate) exit_when_stack_deploys: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -74,6 +76,7 @@ pub(crate) struct Tail<'a, W> {
     writer: &'a mut W,
     config: TailConfig<'a>,
     mode: TailMode,
+    should_quit: Arc<AtomicBool>,
 }
 
 impl<'a, W> Tail<'a, W>
@@ -90,6 +93,7 @@ where
             fetcher,
             writer,
             mode: TailMode::None,
+            should_quit: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -132,20 +136,24 @@ where
         self.mode = TailMode::Tail;
 
         loop {
-            if let Err(e) = self.poll_step().await {
-                match e.downcast::<Error>() {
-                    Ok(e) => match e {
-                        Error::CredentialsExpired => {
-                            // We have to surface this back up to the main
-                            // function, as this will create a new client and
-                            // try again
-                            return Err(e).wrap_err("expired credentials");
-                        }
-                        _ => {
-                            tracing::warn!(err = %e, "unhandled error");
-                        }
-                    },
-                    Err(e) => tracing::error!(err = %e, "unhandled error"),
+            match self.poll_step().await {
+                Ok(true) => return Ok(()),
+                Ok(false) => {}
+                Err(e) => {
+                    match e.downcast::<Error>() {
+                        Ok(e) => match e {
+                            Error::CredentialsExpired => {
+                                // We have to surface this back up to the main
+                                // function, as this will create a new client and
+                                // try again
+                                return Err(e).wrap_err("expired credentials");
+                            }
+                            _ => {
+                                tracing::warn!(err = %e, "unhandled error");
+                            }
+                        },
+                        Err(e) => tracing::error!(err = %e, "unhandled error"),
+                    }
                 }
             }
 
@@ -155,13 +163,13 @@ where
     }
 
     #[tracing::instrument(skip(self))]
-    async fn poll_step(&mut self) -> Result<()> {
+    async fn poll_step(&mut self) -> Result<bool> {
         let all_events = self
             .fetch_events(self.config.stack_info.names.iter(), self.config.since)
             .await?;
         if all_events.is_empty() {
             tracing::debug!("no events found");
-            return Ok(());
+            return Ok(false);
         }
 
         let mut latest_time = self.config.since;
@@ -179,7 +187,11 @@ where
         tracing::trace!(latest_time = ?latest_time, "setting config.since");
         self.config.since = latest_time;
 
-        Ok(())
+        if self.should_quit.load(atomic::Ordering::SeqCst) {
+            return Ok(true);
+        }
+
+        Ok(false)
     }
 
     #[tracing::instrument(skip(self, event))]
@@ -278,6 +290,9 @@ where
                     notify(&self.config.sound).wrap_err("showing notification")?;
                 }
             }
+
+            // signal to the main process that we should quit
+            self.should_quit.store(true, atomic::Ordering::SeqCst);
         } else {
             writeln!(self.writer).wrap_err("printing end of event")?;
         }
@@ -538,6 +553,7 @@ mod tests {
             show_outputs: true,
             sound: "Ping".to_string(),
             show_resource_types: true,
+            exit_when_stack_deploys: false,
         };
         let mut writer = StubWriter::default();
 
