@@ -22,6 +22,7 @@
           src = craneLib.cleanCargoSource ./.;
           buildInputs = [
             pkgs.libiconv
+            pkgs.clippy
           ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin (
             [
               frameworks.Cocoa
@@ -33,6 +34,19 @@
             if pkgs.stdenv.isDarwin
             then "-F${frameworks.Cocoa}/Library/Frameworks -F ${frameworks.AppKit}/Library/Frameworks -framework Cocoa -framework AppKit"
             else "";
+        };
+
+        devShells.default = pkgs.mkShell {
+          buildInputs = [
+            pkgs.cargo
+            pkgs.rustc
+            pkgs.clippy
+            pkgs.rust-analyzer
+            pkgs.libiconv
+            pkgs.rustfmt
+          ];
+
+          CARGO_TARGET_DIR = "target";
         };
       }
     );
