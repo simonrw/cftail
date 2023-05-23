@@ -46,4 +46,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: cachix/install-nix-action@v18
+      - uses: cachix/cachix-action@v11
+        with:
+          name: cftail
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
       - run: nix build -L
+      - run: ./result/bin/cftail --help
