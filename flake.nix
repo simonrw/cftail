@@ -2,51 +2,21 @@
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    crane.url = "github:ipetkov/crane";
-    crane.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, flake-utils, crane, nixpkgs }:
+  outputs = { self, flake-utils, nixpkgs, ...}:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        craneLib = crane.lib.${system};
-
-        pkgs = (import nixpkgs) {
-          inherit system;
-        };
-
+        pkgs = nixpkgs.legacyPackages.${system};
         frameworks = if pkgs.stdenv.isDarwin then pkgs.darwin.apple_sdk.frameworks else null;
       in
       {
-        packages.default = craneLib.buildPackage {
-          src = craneLib.cleanCargoSource ./.;
-          buildInputs = [
-            pkgs.libiconv
-            pkgs.clippy
-          ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin (
-            [
-              frameworks.Cocoa
-              frameworks.AppKit
-            ]
-          );
-
-          NIX_LDFLAGS =
-            if pkgs.stdenv.isDarwin
-            then "-F${frameworks.Cocoa}/Library/Frameworks -F ${frameworks.AppKit}/Library/Frameworks -framework Cocoa -framework AppKit"
-            else "";
+        packages.default = import ./default.nix {
+          inherit pkgs;
         };
 
-        devShells.default = pkgs.mkShell {
-          buildInputs = [
-            pkgs.cargo
-            pkgs.rustc
-            pkgs.clippy
-            pkgs.rust-analyzer
-            pkgs.libiconv
-            pkgs.rustfmt
-          ];
-
-          CARGO_TARGET_DIR = "target";
+        devShells.default = import ./shell.nix {
+          inherit pkgs;
         };
       }
     );
