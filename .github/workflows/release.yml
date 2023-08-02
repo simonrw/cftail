@@ -23,7 +23,7 @@ jobs:
             archive: tar.gz tar.xz
     steps:
       - uses: actions/checkout@master
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
       - name: Compile and release
         uses: rust-build/rust-build.action@v1.4.3
         env:
@@ -42,7 +42,7 @@ jobs:
       - name: debug print tag
         run: |
           echo ${{ github.ref_name }}
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
       - name: Install dependencies
         run: |
           brew install libnotify

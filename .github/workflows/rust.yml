@@ -30,7 +30,7 @@ jobs:
       uses: actions-rs/toolchain@v1.0.6
       with:
             toolchain: stable
-    - uses: Swatinem/rust-cache@v1
+    - uses: Swatinem/rust-cache@v2
     - name: rust-cargo
       uses: actions-rs/cargo@v1.0.3
       with:
