@@ -9,6 +9,12 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "daily"
+    groups:
+      aws-dependencies:
+        patterns:
+          - "aws-*"
+        exclude-patterns:
+          - "aws-sdk-cloudformation"
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
