@@ -9,7 +9,7 @@ pkgs.rustPlatform.buildRustPackage {
 
   src = pkgs.nix-gitignore.gitignoreSource [ ] ./.;
 
-  cargoHash = "sha256-kqVWe108vyjNrM/oE5MGhgR2IzCUNgZVK7TCSAl/PwY=";
+  cargoHash = "sha256-qHDREJlvJT4Ya6eyoxWRvHX0rjfgwoNBSKwjr5GSD4M=";
 
   buildInputs = [
     pkgs.libiconv
