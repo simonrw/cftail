@@ -9,7 +9,9 @@ pkgs.rustPlatform.buildRustPackage {
 
   src = pkgs.nix-gitignore.gitignoreSource [ ] ./.;
 
-  cargoHash = "sha256-36mecfyq4RDP2KNR8uXObSan0VSCMikjhiLNEvlDlPY=";
+  cargoLock = {
+    lockFile = ./Cargo.lock;
+  };
 
   buildInputs = [
     pkgs.libiconv
