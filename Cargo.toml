@@ -17,7 +17,7 @@ termcolor = "1.4.1"
 tokio = {version = "1", features = ["full"]}
 tracing = "0.1.37"
 tracing-futures = "0.2.4"
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 eyre = "0.6.12"
 color-eyre = "0.6.1"
 thiserror = "1.0.56"
