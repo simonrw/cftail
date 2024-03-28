@@ -9,7 +9,7 @@ license = "Apache-2.0"
 
 [dependencies]
 async-trait = "0.1.79"
-chrono = "0.4.35"
+chrono = "0.4.37"
 serde = {version = "1.0.197", features = ["derive"]}
 serde-xml-rs = "0.5.1"
 structopt = "0.3.20"
