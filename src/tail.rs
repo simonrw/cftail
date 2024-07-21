@@ -61,7 +61,6 @@ pub(crate) struct TailConfig<'a> {
     pub(crate) show_outputs: bool,
     pub(crate) show_resource_types: bool,
     pub(crate) sound: String,
-    pub(crate) exit_when_stack_deploys: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -553,7 +552,6 @@ mod tests {
             show_outputs: true,
             sound: "Ping".to_string(),
             show_resource_types: true,
-            exit_when_stack_deploys: false,
         };
         let mut writer = StubWriter::default();
 
