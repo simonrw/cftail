@@ -5,6 +5,7 @@ use super::{
     Output, Stack, StackEvent, StackResource,
 };
 
+use aws_sdk_cloudformation::error::ProvideErrorMetadata;
 use aws_sdk_cloudformation::Client;
 use aws_smithy_types::date_time::Format;
 
@@ -16,19 +17,20 @@ macro_rules! send_request_with_retry {
             // type so that the retry behaviour kicks in. Other types of errors should be
             // `backoff::Error::Permanent` to indicate that the failure should not be retried.
             $builder.clone().send().await.map_err(|e| match e {
-                aws_sdk_cloudformation::types::SdkError::TimeoutError(_) => {
+                aws_sdk_cloudformation::error::SdkError::TimeoutError(_) => {
                     tracing::trace!(%name, "timeout error, retrying");
                     backoff::Error::transient($err::Timeout)
                 }
-                aws_sdk_cloudformation::types::SdkError::ServiceError { err, .. } => match err.code() {
-                    Some(code) if code == "Throttling" => {
-                        tracing::trace!(%name, "throttling error, retrying");
-                        backoff::Error::transient($err::Throttling)
-                    }
+                e => {
+                    match e.code() {
+                        Some(code) if code == "Throttling" => {
+                            tracing::trace!(%name, "throttling error, retrying");
+                            backoff::Error::transient($err::Throttling)
+                        },
+                        _ => backoff::Error::permanent($err::Unknown(e.to_string())),
 
-                    _ => backoff::Error::permanent($err::Unknown(err.to_string())),
-                },
-                _ => backoff::Error::permanent($err::Unknown(e.to_string())),
+                    }
+                }
             })
         })
         .await
@@ -70,8 +72,12 @@ impl AwsCloudFormationClient for Client {
     }
 }
 
-impl From<aws_sdk_cloudformation::output::DescribeStackEventsOutput> for DescribeStackEventsOutput {
-    fn from(o: aws_sdk_cloudformation::output::DescribeStackEventsOutput) -> Self {
+impl From<aws_sdk_cloudformation::operation::describe_stack_events::DescribeStackEventsOutput>
+    for DescribeStackEventsOutput
+{
+    fn from(
+        o: aws_sdk_cloudformation::operation::describe_stack_events::DescribeStackEventsOutput,
+    ) -> Self {
         Self {
             next_token: o.next_token,
             stack_events: o
@@ -84,8 +90,8 @@ impl From<aws_sdk_cloudformation::output::DescribeStackEventsOutput> for Describ
     }
 }
 
-impl From<&aws_sdk_cloudformation::model::StackEvent> for StackEvent {
-    fn from(e: &aws_sdk_cloudformation::model::StackEvent) -> Self {
+impl From<&aws_sdk_cloudformation::types::StackEvent> for StackEvent {
+    fn from(e: &aws_sdk_cloudformation::types::StackEvent) -> Self {
         Self {
             timestamp: e.timestamp.unwrap().fmt(Format::DateTime).unwrap(),
             logical_resource_id: e.logical_resource_id.clone(),
@@ -97,8 +103,10 @@ impl From<&aws_sdk_cloudformation::model::StackEvent> for StackEvent {
     }
 }
 
-impl From<aws_sdk_cloudformation::output::DescribeStacksOutput> for DescribeStacksOutput {
-    fn from(o: aws_sdk_cloudformation::output::DescribeStacksOutput) -> Self {
+impl From<aws_sdk_cloudformation::operation::describe_stacks::DescribeStacksOutput>
+    for DescribeStacksOutput
+{
+    fn from(o: aws_sdk_cloudformation::operation::describe_stacks::DescribeStacksOutput) -> Self {
         Self {
             stacks: o
                 .stacks
@@ -110,8 +118,8 @@ impl From<aws_sdk_cloudformation::output::DescribeStacksOutput> for DescribeStac
     }
 }
 
-impl From<&aws_sdk_cloudformation::model::Stack> for Stack {
-    fn from(s: &aws_sdk_cloudformation::model::Stack) -> Self {
+impl From<&aws_sdk_cloudformation::types::Stack> for Stack {
+    fn from(s: &aws_sdk_cloudformation::types::Stack) -> Self {
         Self {
             outputs: s
                 .outputs
@@ -121,8 +129,8 @@ impl From<&aws_sdk_cloudformation::model::Stack> for Stack {
     }
 }
 
-impl From<&aws_sdk_cloudformation::model::Output> for Output {
-    fn from(o: &aws_sdk_cloudformation::model::Output) -> Self {
+impl From<&aws_sdk_cloudformation::types::Output> for Output {
+    fn from(o: &aws_sdk_cloudformation::types::Output) -> Self {
         Self {
             key: o.output_key.as_ref().unwrap().to_string(),
             value: o.output_value.as_ref().unwrap().to_string(),
@@ -130,10 +138,12 @@ impl From<&aws_sdk_cloudformation::model::Output> for Output {
     }
 }
 
-impl From<aws_sdk_cloudformation::output::DescribeStackResourcesOutput>
+impl From<aws_sdk_cloudformation::operation::describe_stack_resources::DescribeStackResourcesOutput>
     for DescribeStackResourcesOutput
 {
-    fn from(o: aws_sdk_cloudformation::output::DescribeStackResourcesOutput) -> Self {
+    fn from(
+        o: aws_sdk_cloudformation::operation::describe_stack_resources::DescribeStackResourcesOutput,
+    ) -> Self {
         Self {
             stack_resources: o
                 .stack_resources
@@ -145,8 +155,8 @@ impl From<aws_sdk_cloudformation::output::DescribeStackResourcesOutput>
     }
 }
 
-impl From<&aws_sdk_cloudformation::model::StackResource> for StackResource {
-    fn from(r: &aws_sdk_cloudformation::model::StackResource) -> Self {
+impl From<&aws_sdk_cloudformation::types::StackResource> for StackResource {
+    fn from(r: &aws_sdk_cloudformation::types::StackResource) -> Self {
         Self {
             resource_type: r.resource_type.as_ref().unwrap().to_string(),
             physical_resource_id: r.physical_resource_id.clone(),
@@ -157,74 +167,79 @@ impl From<&aws_sdk_cloudformation::model::StackResource> for StackResource {
 
 impl
     From<
-        aws_sdk_cloudformation::types::SdkError<
-            aws_sdk_cloudformation::error::DescribeStackEventsError,
+        aws_sdk_cloudformation::error::SdkError<
+            aws_sdk_cloudformation::operation::describe_stack_events::DescribeStackEventsError,
         >,
     > for DescribeStackEventsError
 {
     fn from(
-        e: aws_sdk_cloudformation::types::SdkError<
-            aws_sdk_cloudformation::error::DescribeStackEventsError,
+        e: aws_sdk_cloudformation::error::SdkError<
+            aws_sdk_cloudformation::operation::describe_stack_events::DescribeStackEventsError,
         >,
     ) -> Self {
         match e {
-            aws_sdk_cloudformation::types::SdkError::ConstructionFailure(_) => {
+            aws_sdk_cloudformation::error::SdkError::ConstructionFailure(_) => {
                 DescribeStackEventsError::Unknown("construction failure".to_string())
             }
-            aws_sdk_cloudformation::types::SdkError::TimeoutError(_) => {
+            aws_sdk_cloudformation::error::SdkError::TimeoutError(_) => {
                 DescribeStackEventsError::Timeout
             }
-            aws_sdk_cloudformation::types::SdkError::DispatchFailure(_) => {
+            aws_sdk_cloudformation::error::SdkError::DispatchFailure(_) => {
                 DescribeStackEventsError::Dispatch
             }
-            aws_sdk_cloudformation::types::SdkError::ResponseError { .. } => {
+            aws_sdk_cloudformation::error::SdkError::ResponseError { .. } => {
                 DescribeStackEventsError::Response
             }
-            aws_sdk_cloudformation::types::SdkError::ServiceError { .. } => {
+            aws_sdk_cloudformation::error::SdkError::ServiceError { .. } => {
                 DescribeStackEventsError::Service
             }
+            _ => todo!(),
         }
     }
 }
 
 impl
     From<
-        aws_sdk_cloudformation::types::SdkError<aws_sdk_cloudformation::error::DescribeStacksError>,
+        aws_sdk_cloudformation::error::SdkError<
+            aws_sdk_cloudformation::operation::describe_stacks::DescribeStacksError,
+        >,
     > for DescribeStacksError
 {
     fn from(
-        e: aws_sdk_cloudformation::types::SdkError<
-            aws_sdk_cloudformation::error::DescribeStacksError,
+        e: aws_sdk_cloudformation::error::SdkError<
+            aws_sdk_cloudformation::operation::describe_stacks::DescribeStacksError,
         >,
     ) -> Self {
         match e {
-            aws_sdk_cloudformation::types::SdkError::ConstructionFailure(_) => todo!(),
-            aws_sdk_cloudformation::types::SdkError::TimeoutError(_) => todo!(),
-            aws_sdk_cloudformation::types::SdkError::DispatchFailure(_) => todo!(),
-            aws_sdk_cloudformation::types::SdkError::ResponseError { .. } => todo!(),
-            aws_sdk_cloudformation::types::SdkError::ServiceError { .. } => todo!(),
+            aws_sdk_cloudformation::error::SdkError::ConstructionFailure(_) => todo!(),
+            aws_sdk_cloudformation::error::SdkError::TimeoutError(_) => todo!(),
+            aws_sdk_cloudformation::error::SdkError::DispatchFailure(_) => todo!(),
+            aws_sdk_cloudformation::error::SdkError::ResponseError { .. } => todo!(),
+            aws_sdk_cloudformation::error::SdkError::ServiceError { .. } => todo!(),
+            _ => todo!(),
         }
     }
 }
 
 impl
     From<
-        aws_sdk_cloudformation::types::SdkError<
-            aws_sdk_cloudformation::error::DescribeStackResourcesError,
+        aws_sdk_cloudformation::error::SdkError<
+            aws_sdk_cloudformation::operation::describe_stack_resources::DescribeStackResourcesError,
         >,
     > for DescribeStackResourcesError
 {
     fn from(
-        e: aws_sdk_cloudformation::types::SdkError<
-            aws_sdk_cloudformation::error::DescribeStackResourcesError,
+        e: aws_sdk_cloudformation::error::SdkError<
+            aws_sdk_cloudformation::operation::describe_stack_resources::DescribeStackResourcesError,
         >,
     ) -> Self {
         match e {
-            aws_sdk_cloudformation::types::SdkError::ConstructionFailure(_) => todo!(),
-            aws_sdk_cloudformation::types::SdkError::TimeoutError(_) => todo!(),
-            aws_sdk_cloudformation::types::SdkError::DispatchFailure(_) => todo!(),
-            aws_sdk_cloudformation::types::SdkError::ResponseError { .. } => todo!(),
-            aws_sdk_cloudformation::types::SdkError::ServiceError { .. } => todo!(),
+            aws_sdk_cloudformation::error::SdkError::ConstructionFailure(_) => todo!(),
+            aws_sdk_cloudformation::error::SdkError::TimeoutError(_) => todo!(),
+            aws_sdk_cloudformation::error::SdkError::DispatchFailure(_) => todo!(),
+            aws_sdk_cloudformation::error::SdkError::ResponseError { .. } => todo!(),
+            aws_sdk_cloudformation::error::SdkError::ServiceError { .. } => todo!(),
+            _ => todo!(),
         }
     }
 }

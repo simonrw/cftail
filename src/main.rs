@@ -1,3 +1,4 @@
+use aws_config::BehaviorVersion;
 use chrono::{prelude::*, Duration as ChronoDuration};
 use eyre::{Result, WrapErr};
 use std::str::FromStr;
@@ -7,7 +8,7 @@ use structopt::StructOpt;
 use termcolor::{ColorChoice, StandardStream};
 use tokio::time::sleep;
 
-use aws_sdk_cloudformation::{Client, Endpoint};
+use aws_sdk_cloudformation::Client;
 
 mod aws;
 mod error;
@@ -109,13 +110,14 @@ struct Opts {
 }
 
 async fn create_client(endpoint_url: &Option<String>) -> aws_sdk_cloudformation::Client {
+    let behaviour_version = BehaviorVersion::v2024_03_28();
     let config = if let Some(url) = endpoint_url {
-        aws_config::from_env()
-            .endpoint_resolver(Endpoint::immutable(url.parse().expect("invalid URI")))
+        aws_config::defaults(behaviour_version)
+            .endpoint_url(url)
             .load()
             .await
     } else {
-        aws_config::load_from_env().await
+        aws_config::load_defaults(behaviour_version).await
     };
     Client::new(&config)
 }
