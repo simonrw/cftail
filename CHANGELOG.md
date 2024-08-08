@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) a
 
 ## [Unreleased]
 
+## [0.9.2](https://github.com/simonrw/cftail/compare/v0.9.1...v0.9.2) - 2024-08-08
+
+### Other
+- *(deps)* bump serde from 1.0.204 to 1.0.205 ([#185](https://github.com/simonrw/cftail/pull/185))
+- *(deps)* bump env_logger from 0.11.4 to 0.11.5 ([#184](https://github.com/simonrw/cftail/pull/184))
+- *(deps)* bump env_logger from 0.11.3 to 0.11.4 ([#183](https://github.com/simonrw/cftail/pull/183))
+- *(deps)* bump aws-sdk-cloudformation from 1.40.0 to 1.41.0 ([#182](https://github.com/simonrw/cftail/pull/182))
+- configure release-plz ([#181](https://github.com/simonrw/cftail/pull/181))
+- fix some warnings ([#179](https://github.com/simonrw/cftail/pull/179))
+
 ### Added
 
 - Support exiting the poll loop early with `--exit-when-stack-deploys` flag [#81]
