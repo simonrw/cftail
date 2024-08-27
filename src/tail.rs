@@ -510,7 +510,7 @@ mod tests {
                     logical_resource_id: Some("test-stack".to_string()),
                     resource_status: Some("UPDATE_COMPLETE".to_string()),
                     resource_type: Some("stack".to_string()),
-                    stack_name: "test-stack".to_string(),
+                    stack_name: input.stack_name.unwrap(),
                     resource_status_reason: None,
                 }],
             })
@@ -563,7 +563,7 @@ mod tests {
         let buf = std::str::from_utf8(&writer.buf).unwrap();
         assert_eq!(
             buf,
-            "2020-11-17T10:38:57.149Z: test-stack - test-stack | stack | UPDATE_COMPLETE\n"
+            "2020-11-17T10:38:57.149Z: SampleStack - test-stack | stack | UPDATE_COMPLETE\n"
         );
     }
 }
