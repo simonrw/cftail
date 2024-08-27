@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use eyre::{Result, WrapErr};
 use futures::future::join_all;
 use notify_rust::Notification;
+use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::sync::atomic::{self, AtomicBool};
@@ -361,6 +362,7 @@ where
                     tracing::debug!("spawned task");
                     let mut next_token: Option<String> = None;
                     let mut all_events = Vec::new();
+                    let mut seen_event_ids = HashSet::new();
 
                     'poll: loop {
                         let input = DescribeStackEventsInput {
@@ -389,6 +391,14 @@ where
                                     if timestamp <= since {
                                         break 'poll;
                                     }
+
+                                    // if we have seen the event already then skip the event
+                                    if seen_event_ids.contains(&event.event_id) {
+                                        continue;
+                                    }
+
+                                    seen_event_ids.insert(event.event_id.clone());
+
                                     all_events.push(event);
                                 }
 
@@ -443,6 +453,7 @@ where
     }
 }
 
+#[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
@@ -492,7 +503,7 @@ mod tests {
     impl crate::aws::AwsCloudFormationClient for MockClient {
         async fn describe_stacks(
             &self,
-            input: crate::aws::DescribeStacksInput,
+            _input: crate::aws::DescribeStacksInput,
         ) -> Result<crate::aws::DescribeStacksOutput, crate::aws::DescribeStacksError> {
             todo!()
         }
@@ -505,11 +516,12 @@ mod tests {
             Ok(crate::aws::DescribeStackEventsOutput {
                 next_token: None,
                 stack_events: vec![StackEvent {
+                    event_id: uuid::Uuid::new_v4().to_string(),
                     timestamp: "2020-11-17T10:38:57.149Z".to_string(),
                     logical_resource_id: Some("test-stack".to_string()),
                     resource_status: Some("UPDATE_COMPLETE".to_string()),
                     resource_type: Some("stack".to_string()),
-                    stack_name: "test-stack".to_string(),
+                    stack_name: input.stack_name.unwrap(),
                     resource_status_reason: None,
                 }],
             })
@@ -517,7 +529,7 @@ mod tests {
 
         async fn describe_stack_resources(
             &self,
-            input: crate::aws::DescribeStackResourcesInput,
+            _input: crate::aws::DescribeStackResourcesInput,
         ) -> Result<crate::aws::DescribeStackResourcesOutput, crate::aws::DescribeStackResourcesError>
         {
             todo!()
@@ -562,7 +574,7 @@ mod tests {
         let buf = std::str::from_utf8(&writer.buf).unwrap();
         assert_eq!(
             buf,
-            "2020-11-17T10:38:57.149Z: test-stack - test-stack | stack | UPDATE_COMPLETE\n"
+            "2020-11-17T10:38:57.149Z: SampleStack - test-stack | stack | UPDATE_COMPLETE\n"
         );
     }
 }
