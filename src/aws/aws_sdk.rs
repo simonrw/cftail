@@ -93,6 +93,7 @@ impl From<aws_sdk_cloudformation::operation::describe_stack_events::DescribeStac
 impl From<&aws_sdk_cloudformation::types::StackEvent> for StackEvent {
     fn from(e: &aws_sdk_cloudformation::types::StackEvent) -> Self {
         Self {
+            event_id: e.event_id.clone().unwrap(),
             timestamp: e.timestamp.unwrap().fmt(Format::DateTime).unwrap(),
             logical_resource_id: e.logical_resource_id.clone(),
             resource_status: e.resource_status.as_ref().map(|s| s.as_str().to_owned()),

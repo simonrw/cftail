@@ -91,6 +91,7 @@ pub(crate) struct DescribeStackEventsOutput {
 }
 
 pub(crate) struct StackEvent {
+    pub(crate) event_id: String,
     pub(crate) timestamp: String,
     pub(crate) logical_resource_id: Option<String>,
     pub(crate) resource_status: Option<String>,

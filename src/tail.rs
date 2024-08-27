@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use eyre::{Result, WrapErr};
 use futures::future::join_all;
 use notify_rust::Notification;
+use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::sync::atomic::{self, AtomicBool};
@@ -361,6 +362,7 @@ where
                     tracing::debug!("spawned task");
                     let mut next_token: Option<String> = None;
                     let mut all_events = Vec::new();
+                    let mut seen_event_ids = HashSet::new();
 
                     'poll: loop {
                         let input = DescribeStackEventsInput {
@@ -389,6 +391,14 @@ where
                                     if timestamp <= since {
                                         break 'poll;
                                     }
+
+                                    // if we have seen the event already then skip the event
+                                    if seen_event_ids.contains(&event.event_id) {
+                                        continue;
+                                    }
+
+                                    seen_event_ids.insert(event.event_id.clone());
+
                                     all_events.push(event);
                                 }
 
@@ -506,6 +516,7 @@ mod tests {
             Ok(crate::aws::DescribeStackEventsOutput {
                 next_token: None,
                 stack_events: vec![StackEvent {
+                    event_id: uuid::Uuid::new_v4().to_string(),
                     timestamp: "2020-11-17T10:38:57.149Z".to_string(),
                     logical_resource_id: Some("test-stack".to_string()),
                     resource_status: Some("UPDATE_COMPLETE".to_string()),
