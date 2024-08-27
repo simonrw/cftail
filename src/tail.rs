@@ -493,7 +493,7 @@ mod tests {
     impl crate::aws::AwsCloudFormationClient for MockClient {
         async fn describe_stacks(
             &self,
-            input: crate::aws::DescribeStacksInput,
+            _input: crate::aws::DescribeStacksInput,
         ) -> Result<crate::aws::DescribeStacksOutput, crate::aws::DescribeStacksError> {
             todo!()
         }
@@ -518,7 +518,7 @@ mod tests {
 
         async fn describe_stack_resources(
             &self,
-            input: crate::aws::DescribeStackResourcesInput,
+            _input: crate::aws::DescribeStackResourcesInput,
         ) -> Result<crate::aws::DescribeStackResourcesOutput, crate::aws::DescribeStackResourcesError>
         {
             todo!()
