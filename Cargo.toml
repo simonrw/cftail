@@ -10,7 +10,7 @@ repository = "https://github.com/simonrw/cftail"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.81"
+async-trait = "0.1.82"
 chrono = "0.4.38"
 serde = {version = "1.0.209", features = ["derive"]}
 serde-xml-rs = "0.5.1"
