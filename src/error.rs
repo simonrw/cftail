@@ -1,9 +1,10 @@
+use aws_sdk_cloudformation::error::SdkError;
 use eyre::WrapErr;
 use serde::Deserialize;
 use std::str::FromStr;
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum Error {
+pub(crate) enum Error<E> {
     #[error("error parsing --since argument")]
     ParseSince,
     #[error("no credentials found")]
@@ -18,8 +19,8 @@ pub(crate) enum Error {
     ErrorResponse(ErrorResponse),
     #[error("other error {0}")]
     Other(String),
-    #[error("aws client error")]
-    Client,
+    #[error("aws client error: {0:?}")]
+    Client(SdkError<E>),
 }
 
 #[derive(Debug, PartialEq, Deserialize)]

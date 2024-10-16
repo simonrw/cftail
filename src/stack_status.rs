@@ -31,7 +31,7 @@ pub(crate) enum StackStatus {
 }
 
 impl TryFrom<&str> for StackStatus {
-    type Error = Error;
+    type Error = Error<()>;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         use StackStatus::*;

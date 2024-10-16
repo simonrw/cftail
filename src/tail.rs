@@ -4,7 +4,7 @@ use aws_sdk_cloudformation::operation::describe_stacks::DescribeStacksInput;
 use aws_sdk_cloudformation::types::StackEvent;
 use aws_smithy_types_convert::date_time::DateTimeExt;
 use chrono::{DateTime, Utc};
-use eyre::{Result, WrapErr};
+use eyre::{Context, Result};
 use futures::future::join_all;
 use notify_rust::Notification;
 use std::collections::HashSet;
@@ -110,7 +110,8 @@ where
         // fetch all of the stack events for the nested stacks
         let all_events = self
             .fetch_events(self.config.stack_info.names.iter(), self.config.since)
-            .await?;
+            .await
+            .wrap_err("fetching events for stack")?;
         tracing::debug!(nevents = all_events.len(), "got all past events");
 
         if all_events.is_empty() {
@@ -145,7 +146,7 @@ where
                 Ok(true) => return Ok(()),
                 Ok(false) => {}
                 Err(e) => {
-                    match e.downcast::<Error>() {
+                    match e.downcast::<Error<()>>() {
                         Ok(e) => match e {
                             Error::CredentialsExpired => {
                                 // We have to surface this back up to the main
@@ -419,9 +420,9 @@ where
                             Err(e) => {
                                 tracing::warn!(error = ?e, "got failed response");
                                 match e {
-                                    SdkError::ServiceError(s) => {
+                                    SdkError::ServiceError(ref s) => {
                                         tracing::error!(error = ?s, "service error");
-                                        return Err(Error::Client).wrap_err("client error");
+                                        return Err(Error::Client(e));
                                     }
                                     _ => {}
                                 }
@@ -431,7 +432,7 @@ where
 
                     let _ = tx.send(all_events).await;
 
-                    Ok::<(), eyre::Error>(())
+                    Ok::<(), _>(())
                 })
             })
             .collect();
@@ -439,7 +440,9 @@ where
         for res in join_all(handles).await {
             let res = res?;
             if let Err(e) = res {
-                return Err(e);
+                // return Err(e);
+                tracing::warn!(error = ?e, "error with task");
+                eyre::bail!("error with task: {e:#}");
             }
         }
 
