@@ -1,5 +1,8 @@
-use crate::aws::{AwsCloudFormationClient, DescribeStackResourcesInput, StackResource};
-use eyre::{Result, WrapErr};
+use crate::aws::AwsCloudFormationClient;
+use aws_sdk_cloudformation::{
+    operation::describe_stack_resources::DescribeStackResourcesInput, types::StackResource,
+};
+use eyre::{Context, Result};
 use std::collections::HashSet;
 
 pub(crate) async fn fetch_nested_stack_names(
@@ -15,9 +18,9 @@ pub(crate) async fn fetch_nested_stack_names(
     let mut stacks = HashSet::new();
     stacks.insert(root_stack_name.clone());
 
-    let target_resource = String::from("AWS::CloudFormation::Stack");
+    let target_resource = "AWS::CloudFormation::Stack";
     for resource in resources {
-        if resource.resource_type == target_resource {
+        if resource.resource_type().unwrap() == target_resource {
             to_fetch.push(resource.physical_resource_id.unwrap());
         }
     }
@@ -29,8 +32,8 @@ pub(crate) async fn fetch_nested_stack_names(
                 .await
                 .wrap_err("fetching stack resources")?;
             for resource in resources {
-                stacks.insert(resource.stack_name);
-                if resource.resource_type == target_resource {
+                stacks.insert(resource.stack_name().unwrap().to_string());
+                if resource.resource_type().unwrap() == target_resource {
                     to_fetch.push(resource.physical_resource_id.unwrap());
                 }
             }
@@ -46,9 +49,11 @@ pub(crate) async fn fetch_stack_resources(
 ) -> Result<Vec<StackResource>> {
     let name = name.into();
     tracing::debug!(name = ?name, "fetching nested resources");
-    let res = client
-        .describe_stack_resources(DescribeStackResourcesInput { stack_name: name })
-        .await
+
+    let input = DescribeStackResourcesInput::builder()
+        .stack_name(name)
+        .build()
         .unwrap();
-    Ok(res.stack_resources)
+    let res = client.describe_stack_resources(input).await.unwrap();
+    Ok(res.stack_resources().to_vec())
 }
