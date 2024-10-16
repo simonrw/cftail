@@ -709,7 +709,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "cftail"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "async-trait",
  "aws-config",

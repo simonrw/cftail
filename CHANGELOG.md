@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) a
 
 ## [Unreleased]
 
+## [0.9.3](https://github.com/simonrw/cftail/compare/v0.9.2...v0.9.3) - 2024-10-16
+
+### Added
+
+- improve error reporting ([#223](https://github.com/simonrw/cftail/pull/223))
+
+### Other
+
+- *(deps)* bump uuid from 1.10.0 to 1.11.0 ([#221](https://github.com/simonrw/cftail/pull/221))
+- *(deps)* bump aws-sdk-cloudformation from 1.51.0 to 1.51.1 ([#222](https://github.com/simonrw/cftail/pull/222))
+- *(deps)* bump aws-sdk-cloudformation from 1.50.0 to 1.51.0 ([#220](https://github.com/simonrw/cftail/pull/220))
+- *(deps)* bump aws-sdk-cloudformation from 1.49.0 to 1.50.0 ([#218](https://github.com/simonrw/cftail/pull/218))
+- *(deps)* bump futures from 0.3.30 to 0.3.31 ([#219](https://github.com/simonrw/cftail/pull/219))
+- *(deps)* bump aws-config from 1.5.7 to 1.5.8 in the aws-dependencies group ([#217](https://github.com/simonrw/cftail/pull/217))
+- *(deps)* bump cachix/install-nix-action from 29 to 30 ([#216](https://github.com/simonrw/cftail/pull/216))
+- *(deps)* bump aws-sdk-cloudformation from 1.48.0 to 1.49.0 ([#215](https://github.com/simonrw/cftail/pull/215))
+- *(deps)* bump aws-config from 1.5.6 to 1.5.7 in the aws-dependencies group ([#214](https://github.com/simonrw/cftail/pull/214))
+- *(deps)* bump aws-smithy-types from 1.2.6 to 1.2.7 in the aws-dependencies group ([#213](https://github.com/simonrw/cftail/pull/213))
+- *(deps)* bump cachix/install-nix-action from V28 to 29 ([#212](https://github.com/simonrw/cftail/pull/212))
+- *(deps)* bump async-trait from 0.1.82 to 0.1.83 ([#211](https://github.com/simonrw/cftail/pull/211))
+- *(deps)* bump thiserror from 1.0.63 to 1.0.64 ([#210](https://github.com/simonrw/cftail/pull/210))
+- *(deps)* bump aws-sdk-cloudformation from 1.47.0 to 1.48.0 ([#209](https://github.com/simonrw/cftail/pull/209))
+- *(deps)* bump cachix/install-nix-action from V27 to 28 ([#208](https://github.com/simonrw/cftail/pull/208))
+- *(deps)* bump aws-sdk-cloudformation from 1.46.0 to 1.47.0 ([#207](https://github.com/simonrw/cftail/pull/207))
+- *(deps)* bump aws-config from 1.5.5 to 1.5.6 in the aws-dependencies group ([#206](https://github.com/simonrw/cftail/pull/206))
+- *(deps)* bump aws-smithy-types from 1.2.4 to 1.2.6 in the aws-dependencies group ([#205](https://github.com/simonrw/cftail/pull/205))
+- *(deps)* bump serde from 1.0.209 to 1.0.210 ([#204](https://github.com/simonrw/cftail/pull/204))
+- *(deps)* bump aws-sdk-cloudformation from 1.45.0 to 1.46.0 ([#203](https://github.com/simonrw/cftail/pull/203))
+- *(deps)* bump async-trait from 0.1.81 to 0.1.82 ([#202](https://github.com/simonrw/cftail/pull/202))
+- *(deps)* bump aws-sdk-cloudformation from 1.44.0 to 1.45.0 ([#201](https://github.com/simonrw/cftail/pull/201))
+- *(deps)* bump aws-smithy-types from 1.2.2 to 1.2.4 in the aws-dependencies group ([#200](https://github.com/simonrw/cftail/pull/200))
+
 ## [0.9.2](https://github.com/simonrw/cftail/compare/v0.9.1...v0.9.2) - 2024-08-27
 
 ### Added
