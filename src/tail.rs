@@ -1,6 +1,10 @@
-use crate::aws::{DescribeStackEventsInput, DescribeStacksInput, StackEvent};
+use aws_sdk_cloudformation::error::SdkError;
+use aws_sdk_cloudformation::operation::describe_stack_events::DescribeStackEventsInput;
+use aws_sdk_cloudformation::operation::describe_stacks::DescribeStacksInput;
+use aws_sdk_cloudformation::types::StackEvent;
+use aws_smithy_types_convert::date_time::DateTimeExt;
 use chrono::{DateTime, Utc};
-use eyre::{Result, WrapErr};
+use eyre::{Context, Result};
 use futures::future::join_all;
 use notify_rust::Notification;
 use std::collections::HashSet;
@@ -19,8 +23,8 @@ use crate::error::Error;
 use crate::stacks::StackInfo;
 
 fn event_sort_key(a: &StackEvent, b: &StackEvent) -> std::cmp::Ordering {
-    let a_timestamp = DateTime::parse_from_rfc3339(&a.timestamp).unwrap();
-    let b_timestamp = DateTime::parse_from_rfc3339(&b.timestamp).unwrap();
+    let a_timestamp = a.timestamp.as_ref().unwrap().as_secs_f64();
+    let b_timestamp = b.timestamp.as_ref().unwrap().as_secs_f64();
 
     a_timestamp.partial_cmp(&b_timestamp).unwrap()
 }
@@ -106,7 +110,8 @@ where
         // fetch all of the stack events for the nested stacks
         let all_events = self
             .fetch_events(self.config.stack_info.names.iter(), self.config.since)
-            .await?;
+            .await
+            .wrap_err("fetching events for stack")?;
         tracing::debug!(nevents = all_events.len(), "got all past events");
 
         if all_events.is_empty() {
@@ -116,7 +121,8 @@ where
 
         let mut latest_time = self.config.since;
         for e in &all_events {
-            let timestamp = crate::utils::parse_event_datetime(e.timestamp.as_str())?;
+            // let timestamp = crate::utils::parse_event_datetime(e.timestamp.as_str())?;
+            let timestamp = e.timestamp().unwrap().to_chrono_utc().unwrap();
             self.print_event(e).await.expect("printing");
             tracing::trace!(latest_time = ?latest_time, timestamp = ?timestamp, "later timestamp");
             if timestamp > latest_time {
@@ -140,7 +146,7 @@ where
                 Ok(true) => return Ok(()),
                 Ok(false) => {}
                 Err(e) => {
-                    match e.downcast::<Error>() {
+                    match e.downcast::<Error<()>>() {
                         Ok(e) => match e {
                             Error::CredentialsExpired => {
                                 // We have to surface this back up to the main
@@ -174,7 +180,7 @@ where
 
         let mut latest_time = self.config.since;
         for event in &all_events {
-            let timestamp = crate::utils::parse_event_datetime(event.timestamp.as_str())?;
+            let timestamp = event.timestamp().unwrap().to_chrono_utc().unwrap();
             self.print_event(event).await.expect("printing");
             tracing::trace!(latest_time = ?latest_time, timestamp = ?timestamp, "later timestamp");
             if timestamp > latest_time {
@@ -204,8 +210,8 @@ where
             .resource_status
             .as_ref()
             .expect("could not find resource_status in response");
-        let stack_name = event.stack_name.as_str();
-        let timestamp = &event.timestamp;
+        let stack_name = event.stack_name().unwrap();
+        let timestamp = event.timestamp().unwrap().to_chrono_utc().unwrap();
         let status_reason = event.resource_status_reason.as_ref();
         let resource_type = event.resource_type.clone().unwrap_or("???".to_string());
 
@@ -279,7 +285,8 @@ where
             writeln!(self.writer, " 🎉✨🤘").wrap_err("printing finished line")?;
             // if let TailMode::Tail = self.mode {
             if self.config.show_outputs {
-                self.print_stack_outputs(&event.stack_name).await?;
+                self.print_stack_outputs(event.stack_name().unwrap())
+                    .await?;
             }
             // }
             if self.config.show_separators {
@@ -304,12 +311,12 @@ where
     #[tracing::instrument(skip(self))]
     async fn print_stack_outputs(&mut self, stack_name: &str) -> Result<()> {
         tracing::info!(%stack_name, "printing stack outputs");
-        let input = DescribeStacksInput {
-            stack_name: Some(stack_name.to_string()),
-            ..Default::default()
-        };
-        let res = self.fetcher.describe_stacks(input).await.unwrap();
-        let stacks = res.stacks;
+        let input = DescribeStacksInput::builder()
+            .stack_name(stack_name)
+            .build()
+            .wrap_err("building describe stacks input")?;
+        let res = self.fetcher.describe_stacks(input).await?;
+        let stacks = res.stacks();
         if stacks.len() != 1 {
             unreachable!(
                 "unexpected number of stacks, found {}, expected 1",
@@ -325,7 +332,10 @@ where
             table.add_row(Row::new(vec!["Name", "Value"]));
 
             for output in outputs {
-                table.add_row(Row::new(vec![&output.key, &output.value]));
+                table.add_row(Row::new(vec![
+                    output.output_key().unwrap(),
+                    output.output_value().unwrap(),
+                ]));
             }
             writeln!(self.writer, "{}", table.render()).unwrap();
         } else {
@@ -365,10 +375,11 @@ where
                     let mut seen_event_ids = HashSet::new();
 
                     'poll: loop {
-                        let input = DescribeStackEventsInput {
-                            stack_name: Some(stack_name.clone()),
-                            next_token: next_token.clone(),
-                        };
+                        let input = DescribeStackEventsInput::builder()
+                            .stack_name(stack_name.clone())
+                            .set_next_token(next_token.clone())
+                            .build()
+                            .expect("constructing input for describe stack events");
 
                         tracing::debug!(input = ?input, "sending request with payload");
                         let res = fetcher
@@ -379,10 +390,9 @@ where
                         match res {
                             Ok(response) => {
                                 tracing::debug!("got successful response");
-                                for event in response.stack_events {
-                                    let timestamp = crate::utils::parse_event_datetime(
-                                        event.timestamp.as_str(),
-                                    )?;
+                                for event in response.stack_events.unwrap() {
+                                    let timestamp =
+                                        event.timestamp().unwrap().to_chrono_utc().unwrap();
 
                                     // We know that the events are in reverse chronological
                                     // order, so if we witness an event with a timestamp
@@ -409,15 +419,10 @@ where
                             }
                             Err(e) => {
                                 tracing::warn!(error = ?e, "got failed response");
-                                use crate::aws::DescribeStackEventsError::*;
                                 match e {
-                                    Service | Response => {
-                                        tracing::error!("service error");
-                                        return Err(Error::Client).wrap_err("client error");
-                                    }
-                                    Unknown(msg) => {
-                                        tracing::error!(%msg, "unexpected error");
-                                        return Err(Error::Client).wrap_err("client error");
+                                    SdkError::ServiceError(ref s) => {
+                                        tracing::error!(error = ?s, "service error");
+                                        return Err(Error::Client(e));
                                     }
                                     _ => {}
                                 }
@@ -427,7 +432,7 @@ where
 
                     let _ = tx.send(all_events).await;
 
-                    Ok::<(), eyre::Error>(())
+                    Ok::<(), _>(())
                 })
             })
             .collect();
@@ -435,7 +440,9 @@ where
         for res in join_all(handles).await {
             let res = res?;
             if let Err(e) = res {
-                return Err(e);
+                // return Err(e);
+                tracing::warn!(error = ?e, "error with task");
+                eyre::bail!("error with task: {e:#}");
             }
         }
 
@@ -458,11 +465,26 @@ mod tests {
     use std::sync::Arc;
 
     use async_trait::async_trait;
+    use aws_sdk_cloudformation::{
+        config::http::HttpResponse,
+        error::SdkError,
+        operation::{
+            describe_stack_events::{
+                DescribeStackEventsError, DescribeStackEventsInput, DescribeStackEventsOutput,
+            },
+            describe_stack_resources::{
+                DescribeStackResourcesError, DescribeStackResourcesInput,
+                DescribeStackResourcesOutput,
+            },
+            describe_stacks::{DescribeStacksError, DescribeStacksInput, DescribeStacksOutput},
+        },
+        types::{ResourceStatus, StackEvent},
+    };
+    use aws_smithy_types::DateTime;
     use chrono::{TimeZone, Utc};
     use termcolor::{ColorSpec, WriteColor};
 
     use crate::{
-        aws::StackEvent,
         stacks::StackInfo,
         tail::{Tail, TailConfig},
     };
@@ -503,35 +525,48 @@ mod tests {
     impl crate::aws::AwsCloudFormationClient for MockClient {
         async fn describe_stacks(
             &self,
-            _input: crate::aws::DescribeStacksInput,
-        ) -> Result<crate::aws::DescribeStacksOutput, crate::aws::DescribeStacksError> {
+            _input: DescribeStacksInput,
+        ) -> std::result::Result<DescribeStacksOutput, SdkError<DescribeStacksError, HttpResponse>>
+        {
             todo!()
         }
 
         async fn describe_stack_events(
             &self,
-            input: crate::aws::DescribeStackEventsInput,
-        ) -> Result<crate::aws::DescribeStackEventsOutput, crate::aws::DescribeStackEventsError>
-        {
-            Ok(crate::aws::DescribeStackEventsOutput {
-                next_token: None,
-                stack_events: vec![StackEvent {
-                    event_id: uuid::Uuid::new_v4().to_string(),
-                    timestamp: "2020-11-17T10:38:57.149Z".to_string(),
-                    logical_resource_id: Some("test-stack".to_string()),
-                    resource_status: Some("UPDATE_COMPLETE".to_string()),
-                    resource_type: Some("stack".to_string()),
-                    stack_name: input.stack_name.unwrap(),
-                    resource_status_reason: None,
-                }],
-            })
+            input: DescribeStackEventsInput,
+        ) -> std::result::Result<
+            DescribeStackEventsOutput,
+            SdkError<DescribeStackEventsError, HttpResponse>,
+        > {
+            let stack_event = StackEvent::builder()
+                .event_id(uuid::Uuid::new_v4().to_string())
+                .timestamp(
+                    DateTime::from_str(
+                        "2020-11-17T10:38:57.149Z",
+                        aws_smithy_types::date_time::Format::DateTimeWithOffset,
+                    )
+                    .unwrap(),
+                )
+                .logical_resource_id("test-stack")
+                .resource_status(ResourceStatus::UpdateComplete)
+                .resource_type("stack")
+                .stack_name(input.stack_name().unwrap())
+                .build();
+
+            let output = DescribeStackEventsOutput::builder()
+                .set_next_token(None)
+                .stack_events(stack_event)
+                .build();
+            Ok(output)
         }
 
         async fn describe_stack_resources(
             &self,
-            _input: crate::aws::DescribeStackResourcesInput,
-        ) -> Result<crate::aws::DescribeStackResourcesOutput, crate::aws::DescribeStackResourcesError>
-        {
+            _input: DescribeStackResourcesInput,
+        ) -> std::result::Result<
+            DescribeStackResourcesOutput,
+            SdkError<DescribeStackResourcesError, HttpResponse>,
+        > {
             todo!()
         }
     }
@@ -574,7 +609,7 @@ mod tests {
         let buf = std::str::from_utf8(&writer.buf).unwrap();
         assert_eq!(
             buf,
-            "2020-11-17T10:38:57.149Z: SampleStack - test-stack | stack | UPDATE_COMPLETE\n"
+            "2020-11-17 10:38:57.149 UTC: SampleStack - test-stack | stack | UPDATE_COMPLETE\n"
         );
     }
 }

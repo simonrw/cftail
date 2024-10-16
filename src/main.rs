@@ -59,7 +59,7 @@ fn parse_since_argument(src: &str) -> Result<DateTime<Utc>> {
             .ok_or(eyre::eyre!("invalid time"));
     }
 
-    Err(Error::ParseSince).wrap_err("error parsing since argument")
+    Err(Error::<()>::ParseSince).wrap_err("error parsing since argument")
 }
 
 /// Tail CloudFormation deployments
@@ -120,7 +120,7 @@ async fn create_client(endpoint_url: &Option<String>) -> aws_sdk_cloudformation:
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> eyre::Result<()> {
     tracing_subscriber::fmt::init();
     color_eyre::install().unwrap();
 
@@ -160,7 +160,7 @@ async fn main() {
         tracing::info!("prefetching tasks");
         match tail.prefetch().await {
             Ok(_) => {}
-            Err(e) => match e.downcast_ref::<Error>() {
+            Err(e) => match e.downcast_ref::<Error<()>>() {
                 Some(Error::NoCredentials) => {
                     eprintln!("Error: no valid credentials found");
                     std::process::exit(1);
@@ -193,9 +193,9 @@ async fn main() {
             Ok(_) => {
                 tracing::info!("exiting from tail successfully");
                 // found our exit early condition
-                return;
+                return Ok(());
             }
-            Err(e) => match e.downcast_ref::<Error>() {
+            Err(e) => match e.downcast_ref::<Error<()>>() {
                 Some(Error::CredentialsExpired) => {
                     eprintln!("Error: your credentials have expired");
                     std::process::exit(1);
