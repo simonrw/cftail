@@ -460,12 +460,27 @@ where
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
     use async_trait::async_trait;
+    use aws_sdk_cloudformation::{
+        config::http::HttpResponse,
+        error::SdkError,
+        operation::{
+            describe_stack_events::{
+                DescribeStackEventsError, DescribeStackEventsInput, DescribeStackEventsOutput,
+            },
+            describe_stack_resources::{
+                DescribeStackResourcesError, DescribeStackResourcesInput,
+                DescribeStackResourcesOutput,
+            },
+            describe_stacks::{DescribeStacksError, DescribeStacksInput, DescribeStacksOutput},
+        },
+        types::{ResourceStatus, StackEvent},
+    };
+    use aws_smithy_types::DateTime;
     use chrono::{TimeZone, Utc};
     use termcolor::{ColorSpec, WriteColor};
 
@@ -510,35 +525,48 @@ mod tests {
     impl crate::aws::AwsCloudFormationClient for MockClient {
         async fn describe_stacks(
             &self,
-            _input: crate::aws::DescribeStacksInput,
-        ) -> Result<crate::aws::DescribeStacksOutput, crate::aws::DescribeStacksError> {
+            _input: DescribeStacksInput,
+        ) -> std::result::Result<DescribeStacksOutput, SdkError<DescribeStacksError, HttpResponse>>
+        {
             todo!()
         }
 
         async fn describe_stack_events(
             &self,
-            input: crate::aws::DescribeStackEventsInput,
-        ) -> Result<crate::aws::DescribeStackEventsOutput, crate::aws::DescribeStackEventsError>
-        {
-            Ok(crate::aws::DescribeStackEventsOutput {
-                next_token: None,
-                stack_events: vec![StackEvent {
-                    event_id: uuid::Uuid::new_v4().to_string(),
-                    timestamp: "2020-11-17T10:38:57.149Z".to_string(),
-                    logical_resource_id: Some("test-stack".to_string()),
-                    resource_status: Some("UPDATE_COMPLETE".to_string()),
-                    resource_type: Some("stack".to_string()),
-                    stack_name: input.stack_name.unwrap(),
-                    resource_status_reason: None,
-                }],
-            })
+            input: DescribeStackEventsInput,
+        ) -> std::result::Result<
+            DescribeStackEventsOutput,
+            SdkError<DescribeStackEventsError, HttpResponse>,
+        > {
+            let stack_event = StackEvent::builder()
+                .event_id(uuid::Uuid::new_v4().to_string())
+                .timestamp(
+                    DateTime::from_str(
+                        "2020-11-17T10:38:57.149Z",
+                        aws_smithy_types::date_time::Format::DateTimeWithOffset,
+                    )
+                    .unwrap(),
+                )
+                .logical_resource_id("test-stack")
+                .resource_status(ResourceStatus::UpdateComplete)
+                .resource_type("stack")
+                .stack_name(input.stack_name().unwrap())
+                .build();
+
+            let output = DescribeStackEventsOutput::builder()
+                .set_next_token(None)
+                .stack_events(stack_event)
+                .build();
+            Ok(output)
         }
 
         async fn describe_stack_resources(
             &self,
-            _input: crate::aws::DescribeStackResourcesInput,
-        ) -> Result<crate::aws::DescribeStackResourcesOutput, crate::aws::DescribeStackResourcesError>
-        {
+            _input: DescribeStackResourcesInput,
+        ) -> std::result::Result<
+            DescribeStackResourcesOutput,
+            SdkError<DescribeStackResourcesError, HttpResponse>,
+        > {
             todo!()
         }
     }
@@ -581,8 +609,7 @@ mod tests {
         let buf = std::str::from_utf8(&writer.buf).unwrap();
         assert_eq!(
             buf,
-            "2020-11-17T10:38:57.149Z: SampleStack - test-stack | stack | UPDATE_COMPLETE\n"
+            "2020-11-17 10:38:57.149 UTC: SampleStack - test-stack | stack | UPDATE_COMPLETE\n"
         );
     }
 }
-*/
