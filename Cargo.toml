@@ -27,7 +27,7 @@ futures = "0.3.31"
 term_size = "0.3.2"
 notify-rust = "4.10.0"
 term-table = "1.4.0"
-aws-config = "1.5.11" 
+aws-config = "1.5.12" 
 aws-sdk-cloudformation = "1.57.0"
 aws-smithy-types = "1.2.11"
 backoff = { version = "0.4.0", features = ["futures", "tokio"] }
