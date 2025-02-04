@@ -29,7 +29,7 @@ notify-rust = "4.10.0"
 term-table = "1.4.0"
 aws-config = "1.5.15" 
 aws-sdk-cloudformation = "1.63.0"
-aws-smithy-types = "1.2.12"
+aws-smithy-types = "1.2.13"
 backoff = { version = "0.4.0", features = ["futures", "tokio"] }
 humantime = "2.1.0"
 aws-smithy-types-convert = { version = "0.60.8", features = ["convert-chrono"] }
