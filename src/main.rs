@@ -107,7 +107,7 @@ struct Opts {
 }
 
 async fn create_client(endpoint_url: &Option<String>) -> aws_sdk_cloudformation::Client {
-    let behaviour_version = BehaviorVersion::v2024_03_28();
+    let behaviour_version = BehaviorVersion::latest();
     let config = if let Some(url) = endpoint_url {
         aws_config::defaults(behaviour_version)
             .endpoint_url(url)
