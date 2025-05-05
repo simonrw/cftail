@@ -21,7 +21,7 @@ tracing = "0.1.41"
 tracing-futures = "0.2.4"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 eyre = "0.6.12"
-color-eyre = "0.6.3"
+color-eyre = "0.6.4"
 thiserror = "2.0.12"
 futures = "0.3.31"
 term_size = "0.3.2"
