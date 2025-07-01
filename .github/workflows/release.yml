@@ -59,7 +59,7 @@ jobs:
           strip target/release/cftail
           zip -j cftail_${{ github.ref_name }}_x86_64-apple-darwin.zip target/release/cftail
       - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@2.10.0
+        uses: svenstaro/upload-release-action@2.11.1
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: cftail_${{ github.ref_name }}_x86_64-apple-darwin.zip
