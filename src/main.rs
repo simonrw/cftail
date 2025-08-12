@@ -97,6 +97,10 @@ struct Opts {
     #[structopt(long)]
     no_show_resource_types: bool,
 
+    // Do not exit on completion
+    #[structopt(long)]
+    no_exit_on_completion: bool,
+
     // Sound to play
     #[structopt(long, default_value = "Ping")]
     sound: String,
@@ -153,6 +157,7 @@ async fn main() -> eyre::Result<()> {
             show_outputs: !opts.no_show_outputs,
             show_resource_types: !opts.no_show_resource_types,
             sound: opts.sound.clone(),
+            should_exit_on_completion: !opts.no_exit_on_completion,
         };
 
         let mut tail = Tail::new(config, Arc::new(client), &mut writer);

@@ -66,6 +66,7 @@ pub(crate) struct TailConfig<'a> {
     pub(crate) show_outputs: bool,
     pub(crate) show_resource_types: bool,
     pub(crate) sound: String,
+    pub(crate) should_exit_on_completion: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -143,7 +144,11 @@ where
 
         loop {
             match self.poll_step().await {
-                Ok(true) => return Ok(()),
+                Ok(true) => {
+                    if self.config.should_exit_on_completion {
+                        return Ok(());
+                    }
+                }
                 Ok(false) => {}
                 Err(e) => {
                     match e.downcast::<Error<()>>() {
@@ -299,7 +304,10 @@ where
             }
 
             // signal to the main process that we should quit
-            self.should_quit.store(true, atomic::Ordering::SeqCst);
+            self.should_quit.store(
+                self.config.should_exit_on_completion,
+                atomic::Ordering::SeqCst,
+            );
         } else {
             writeln!(self.writer).wrap_err("printing end of event")?;
         }
