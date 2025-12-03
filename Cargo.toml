@@ -36,7 +36,7 @@ aws-smithy-types-convert = { version = "0.60.10", features = ["convert-chrono"] 
 
 [dev-dependencies]
 env_logger = "0.11.8"
-log = "0.4.28"
+log = "0.4.29"
 uuid = { version = "1.19.0", features = ["v4"] }
 
 [profile.release]
