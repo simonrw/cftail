@@ -23,7 +23,7 @@ tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 eyre = "0.6.12"
 color-eyre = "0.6.5"
 thiserror = "2.0.18"
-futures = "0.3.31"
+futures = "0.3.32"
 term_size = "0.3.2"
 notify-rust = "4.12.0"
 term-table = "1.4.0"
