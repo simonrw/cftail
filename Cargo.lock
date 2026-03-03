@@ -598,9 +598,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-types"
-version = "1.4.5"
+version = "1.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ca2734c16913a45343b37313605d84e7d8b34a4611598ce1d25b35860a2bed3"
+checksum = "d2b1117b3b2bbe166d11199b540ceed0d0f7676e36e7b962b5a437a9971eac75"
 dependencies = [
  "base64-simd",
  "bytes",
@@ -624,9 +624,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-types-convert"
-version = "0.60.13"
+version = "0.60.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b62e5e75fed51b75fbc63966c039ca403aa980ba637c0ccce86c3c3144629303"
+checksum = "1e50da9f5e3ecf145b4f6eb04963e6fbf52f528017de0784a28c56b9407414b1"
 dependencies = [
  "aws-smithy-types",
  "chrono",
@@ -774,9 +774,9 @@ checksum = "46c5e41b57b8bba42a04676d81cb89e9ee8e859a1a66f80a5a72e1cb76b34d43"
 
 [[package]]
 name = "bytes"
-version = "1.10.1"
+version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
+checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
 name = "bytes-utils"
