@@ -28,7 +28,7 @@ term_size = "0.3.2"
 notify-rust = "4.16.0"
 term-table = "1.4.0"
 aws-config = "1.8.16" 
-aws-sdk-cloudformation = "1.110.0"
+aws-sdk-cloudformation = "1.111.0"
 aws-smithy-types = "1.4.7"
 backoff = { version = "0.4.0", features = ["futures", "tokio"] }
 humantime = "2.3.0"
