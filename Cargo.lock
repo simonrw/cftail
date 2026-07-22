@@ -356,9 +356,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-cloudformation"
-version = "1.118.0"
+version = "1.119.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "851b6a08d1d65691810acf810f1eeb86a14d2177e87738b059ed5b3c994adf32"
+checksum = "1ebbdcbcb332c8f762a2deefa63c1ded59a5267772678dbefb9a8b022bd1d098"
 dependencies = [
  "arc-swap",
  "aws-credential-types",
@@ -367,12 +367,12 @@ dependencies = [
  "aws-smithy-http",
  "aws-smithy-json",
  "aws-smithy-observability",
- "aws-smithy-query 0.61.1",
+ "aws-smithy-query",
  "aws-smithy-runtime",
  "aws-smithy-runtime-api",
  "aws-smithy-schema",
  "aws-smithy-types",
- "aws-smithy-xml 0.61.1",
+ "aws-smithy-xml",
  "aws-types",
  "fastrand",
  "http 0.2.12",
@@ -446,12 +446,12 @@ dependencies = [
  "aws-smithy-http",
  "aws-smithy-json",
  "aws-smithy-observability",
- "aws-smithy-query 0.62.0",
+ "aws-smithy-query",
  "aws-smithy-runtime",
  "aws-smithy-runtime-api",
  "aws-smithy-schema",
  "aws-smithy-types",
- "aws-smithy-xml 0.62.0",
+ "aws-smithy-xml",
  "aws-types",
  "fastrand",
  "http 0.2.12",
@@ -566,16 +566,6 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-query"
-version = "0.61.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd22a6ba36e3f113cb8d5b3d1fe0ed31c76ee608ef63322d753bb8d2c9479e77"
-dependencies = [
- "aws-smithy-types",
- "urlencoding",
-]
-
-[[package]]
-name = "aws-smithy-query"
 version = "0.62.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "512346c7212ab7436df2d77a16d976a468ae44a418835511d2a69269810aaf62"
@@ -583,7 +573,7 @@ dependencies = [
  "aws-smithy-runtime-api",
  "aws-smithy-schema",
  "aws-smithy-types",
- "aws-smithy-xml 0.62.0",
+ "aws-smithy-xml",
  "urlencoding",
 ]
 
@@ -687,18 +677,6 @@ checksum = "f09916ff010d43086d52ec7d38899a5bc2ad21a2cb5428f85f1ee84a44008ba0"
 dependencies = [
  "aws-smithy-types",
  "chrono",
-]
-
-[[package]]
-name = "aws-smithy-xml"
-version = "0.61.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea3f68eec3607f02acd24067969ce2abc6ba16aa7d5ce59ca450ed2fb5f78957"
-dependencies = [
- "aws-smithy-runtime-api",
- "aws-smithy-schema",
- "aws-smithy-types",
- "xmlparser",
 ]
 
 [[package]]
