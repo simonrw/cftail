@@ -28,7 +28,8 @@ term_size = "0.3.2"
 notify-rust = "4.17.0"
 term-table = "1.4.0"
 aws-config = "1.8.18" 
-aws-sdk-cloudformation = "1.115.0"
+# Use the modern HTTPS client without the legacy, unpatched TLS connector.
+aws-sdk-cloudformation = { version = "1.115.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-smithy-types = "1.4.9"
 backoff = { version = "0.4.0", features = ["futures", "tokio"] }
 humantime = "2.3.0"
