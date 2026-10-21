@@ -607,6 +607,7 @@ mod tests {
             show_outputs: true,
             sound: "Ping".to_string(),
             show_resource_types: true,
+            should_exit_on_completion: true,
         };
         let mut writer = StubWriter::default();
 
