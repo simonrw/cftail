@@ -2,7 +2,7 @@
 authors = ["Simon Walker <s.r.walker101@googlemail.com>"]
 edition = "2018"
 name = "cftail"
-version = "0.9.3"
+version = "0.9.4"
 license = "Apache-2.0"
 description = "Tail CloudFormation deploys"
 repository = "https://github.com/simonrw/cftail"
