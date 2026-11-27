@@ -33,7 +33,7 @@ aws-sdk-cloudformation = { version = "1.115.0", default-features = false, featur
 aws-smithy-types = "1.4.9"
 backoff = { version = "0.4.0", features = ["futures", "tokio"] }
 humantime = "2.3.0"
-aws-smithy-types-convert = { version = "0.61.1", features = ["convert-chrono"] }
+aws-smithy-types-convert = { version = "0.62.0", features = ["convert-chrono"] }
 
 [dev-dependencies]
 env_logger = "0.11.10"
